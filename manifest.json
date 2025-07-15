@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Timestamp Helper",
+  "version": "1.23",
+  "description": "A simple extension to help create timestamps for YouTube videos.",
+  "permissions": ["storage", "scripting", "activeTab"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
