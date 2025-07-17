@@ -5,27 +5,14 @@
   <style>
     body {
       font-family: sans-serif;
-      width: 250px;
-      text-align: center;
+      width: 300px; /* 少し幅を広げます */
       padding: 10px;
     }
-    button {
-      width: 100%;
-      padding: 10px;
-      margin-bottom: 10px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    #clear-btn {
-        background-color: #f44336;
-        color: white;
-    }
+    /* リスト内のボタンに影響しないように、このファイルではボタンのグローバルスタイルを削除 */
   </style>
 </head>
 <body>
-  <button id="copy-btn">Copy All to Clipboard</button>
-  <button id="clear-btn">Clear All Timestamps</button>
+  <div id="timestamps-list"></div>
   <script src="popup.js"></script>
 </body>
 </html>

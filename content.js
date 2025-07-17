@@ -8,6 +8,13 @@ let currentVideoId = null;
 let currentClipTime = null;
 let isEditing = false; // To track application mode (editing vs. display)
 
+document.addEventListener('keydown', (event) => {
+  if(event.key === ']'){
+    initExtension();
+    console.log("再読み込み");
+  }
+});
+
 // --- Initialization Observer ---
 const observer = new MutationObserver((mutations, obs) => {
   const video = document.querySelector("video");
@@ -57,14 +64,15 @@ function copyToClipboard(text) {
 
 // --- Main Logic ---
 function initExtension() {
+  console.log("initmae");
   currentVideoId = getVideoIdFromUrl(window.location.href);
   if (!currentVideoId) return;
-
+  console.log("initato");
   document.addEventListener('keydown', handleGeneralShortcuts);
   createMainContainer();
   loadAndDisplayText();
 
-  chrome.storage.sync.get('mainContainerHidden', (data) => {
+    chrome.storage.local.get('mainContainerHidden', (data) => {
     if (mainContainer) {
       mainContainer.hidden = data.mainContainerHidden || false;
     }
@@ -80,8 +88,9 @@ function initExtension() {
 }
 
 function createMainContainer() {
+  console.log("mae");
   if (document.getElementById('youtube-timestamp-main-container')) return;
-
+  console.log("ato");
   mainContainer = document.createElement('div');
   Object.assign(mainContainer.style, {
     position: 'fixed', top: '80px', right: '20px', width: '400px', height: '300px',
@@ -230,7 +239,7 @@ function switchToEditMode(currentText, options = {}) {
 function loadAndDisplayText() {
   if (!currentVideoId) return;
   chrome.runtime.sendMessage({ action: "loadText", videoId: currentVideoId }, (response) => {
-    const text = (response && response.text) ? response.text : "タイムスタンプ（編集中）  ※ネタバレ注意\n\n";
+    const text = (response && response.text) ? response.text : "";
     if (!isEditing) {
         switchToDisplayMode(text);
     }
@@ -264,10 +273,16 @@ function addTimestamp(options = {}) {
     } else {
         chrome.runtime.sendMessage({ action: "loadText", videoId: currentVideoId }, (response) => {
             const currentText = (response && response.text) ? response.text : "";
-            const newText = currentText + timestampText;
+            let textToSave = currentText;
+
+            // If the current text is empty, prepend the default initial text.
+            if (textToSave.trim() === "") {
+                textToSave = "タイムスタンプ（編集中）  ※ネタバレ注意\n\n";
+            }
+            textToSave += timestampText; // Add the new timestamp
             
-            chrome.runtime.sendMessage({ action: "saveText", videoId: currentVideoId, text: newText }, () => {
-                switchToEditMode(newText, { scrollToBottom: true });
+            chrome.runtime.sendMessage({ action: "saveText", videoId: currentVideoId, text: textToSave }, () => {
+                switchToEditMode(textToSave, { scrollToBottom: true });
             });
         });
     }
@@ -284,19 +299,11 @@ function handleGeneralShortcuts(event) {
       return;
   }
 
-  if (event.key === ']') {
-    if (!mainContainer) createMainContainer();
-    else {
-        mainContainer.style.top = '80px';
-        mainContainer.style.right = '20px';
-    }
-  }
-
   if (event.key === 'g') {
     event.preventDefault();
     if (mainContainer) {
       mainContainer.hidden = !mainContainer.hidden;
-      chrome.storage.sync.set({ mainContainerHidden: mainContainer.hidden });
+            chrome.storage.local.set({ mainContainerHidden: mainContainer.hidden });
     }
   }
 
