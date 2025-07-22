@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = await chrome.storage.local.get(['timestampPrefix', 'timestampSuffix', 'defaultTimestampText']);
         prefixInput.value = data.timestampPrefix !== undefined ? data.timestampPrefix : ' - ';
         suffixInput.value = data.timestampSuffix !== undefined ? data.timestampSuffix : '  ';
-        defaultTimestampTextInput.value = data.defaultTimestampText !== undefined ? data.defaultTimestampText : 'タイムスタンプ（編集中）  ※ネタバレ注意\n\n';
+        defaultTimestampTextInput.value = data.defaultTimestampText !== undefined ? data.defaultTimestampText : 'タイムスタンプ（編集中）  ※ネタバレ注意';
         updateFormatDemo();
     }
 
@@ -97,10 +97,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateFormatDemo() {
         const prefix = prefixInput.value;
         const suffix = suffixInput.value;
-        const defaultText = defaultTimestampTextInput.value;
         const demoTime = "01:23"; // Example time
         const demoMemo = "ここ好き"
-        formatDemoDisplay.textContent = `${defaultText.replace(/\\n/g, '\n')}${prefix}${demoTime}${suffix}${demoMemo}`;
+        formatDemoDisplay.textContent = `${prefix}${demoTime}${suffix}${demoMemo}`;
     }
 
     prefixInput.addEventListener('input', updateFormatDemo);

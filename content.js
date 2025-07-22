@@ -401,7 +401,8 @@ async function addTimestamp(options = {}) {
             const currentText = (response && response.text) ? response.text : "";
             let textToSave = currentText;
             if (textToSave.trim() === "") {
-                textToSave = "タイムスタンプ（編集中）  ※ネタバレ注意\n\n";
+                const storedSettings = await chrome.storage.local.get(['defaultTimestampText']);
+                textToSave = storedSettings.defaultTimestampText !== undefined ? storedSettings.defaultTimestampText + "\n\n" : "タイムスタンプ（編集中）  ※ネタバレ注意\n\n";
             }
             textToSave += timestampText;
             textToSave = await replaceNgWords(textToSave);
