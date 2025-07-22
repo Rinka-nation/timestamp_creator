@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Timestamp Helper",
+  "name": "YouTube Timestamp Creator",
   "version": "1.26",
   "description": "A simple extension to help create timestamps for YouTube videos.",
   "permissions": ["storage", "scripting", "activeTab", "notifications"],
