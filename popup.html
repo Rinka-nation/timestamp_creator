@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8">
   <title>YouTube Timestamp Helper</title>
   <style>
     body {
@@ -13,6 +14,17 @@
 </head>
 <body>
   <div id="timestamps-list"></div>
+
+  <hr>
+  <h3>NGワード設定</h3>
+  <p>NGワードを1行に1つずつ入力してください。</p>
+  <textarea id="ng-words-textarea" rows="5" style="width: 95%;"></textarea>
+  <button id="save-ng-words">保存</button>
+  <p id="save-status" style="color: green;"></p>
+
+  <h4>現在のNGワード:</h4>
+  <div id="current-ng-words"></div>
+
   <script src="popup.js"></script>
 </body>
 </html>

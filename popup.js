@@ -1,5 +1,30 @@
 document.addEventListener('DOMContentLoaded', () => {
     const listContainer = document.getElementById('timestamps-list');
+    const ngWordsTextarea = document.getElementById('ng-words-textarea');
+    const saveNgWordsButton = document.getElementById('save-ng-words');
+    const saveStatus = document.getElementById('save-status');
+    const currentNgWordsDiv = document.getElementById('current-ng-words');
+
+    // --- NG Word Management ---
+    async function loadNgWords() {
+        const data = await chrome.storage.local.get('ngWords');
+        if (data.ngWords) {
+            ngWordsTextarea.value = data.ngWords.join('\n');
+            currentNgWordsDiv.textContent = data.ngWords.join(', ');
+        }
+    }
+
+    async function saveNgWords() {
+        const words = ngWordsTextarea.value.split('\n').map(w => w.trim()).filter(Boolean);
+        await chrome.storage.local.set({ ngWords: words });
+        saveStatus.textContent = '保存しました！';
+        setTimeout(() => saveStatus.textContent = '', 2000);
+        loadNgWords(); // Reload to update the display
+    }
+
+    saveNgWordsButton.addEventListener('click', saveNgWords);
+    loadNgWords();
+
 
     // --- API Helper ---
     async function fetchVideoTitle(videoId) {

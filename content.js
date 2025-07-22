@@ -9,7 +9,7 @@ let currentClipTime = null;
 let isEditing = false; // To track application mode (editing vs. display)
 
 document.addEventListener('keydown', (event) => {
-  if(event.key === ']'){
+  if(event.key === ']'){ 
     initExtension();
     console.log("再読み込み");
   }
@@ -200,10 +200,26 @@ function switchToEditMode(currentText, options = {}) {
     editor.setAttribute("spellcheck", "false");
     editor.value = currentText;
 
-    editor.addEventListener('input', () => {
+    let isComposing = false;
+    editor.addEventListener('compositionstart', () => { isComposing = true; });
+    editor.addEventListener('compositionend', (event) => {
+        isComposing = false;
+        // Manually trigger input to apply NG word filter after composition
+        event.target.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    editor.addEventListener('input', async () => {
+        if (isComposing) return;
+
         const newText = editor.value;
-        chrome.runtime.sendMessage({ action: "saveText", videoId: currentVideoId, text: newText });
-        updateCharCount(newText);
+        const replacedText = await replaceNgWords(newText);
+        chrome.runtime.sendMessage({ action: "saveText", videoId: currentVideoId, text: replacedText });
+        updateCharCount(replacedText);
+        if (newText !== replacedText) {
+            const cursorPos = editor.selectionStart;
+            editor.value = replacedText;
+            editor.selectionStart = editor.selectionEnd = cursorPos;
+        }
     });
 
     editor.addEventListener('blur', () => {
@@ -234,6 +250,27 @@ function switchToEditMode(currentText, options = {}) {
     updateCharCount(currentText);
 }
 
+function escapeRegExp(string) {
+  // $& means the whole matched string
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\$&');
+}
+
+async function replaceNgWords(text) {
+    const data = await chrome.storage.local.get('ngWords');
+    const ngWords = data.ngWords || [];
+    if (ngWords.length === 0) return text;
+
+    let replacedText = text;
+    for (const word of ngWords) {
+        if (word) { // Do not process empty strings
+            const escapedWord = escapeRegExp(word);
+            const regex = new RegExp(escapedWord, 'gi');
+            replacedText = replacedText.replace(regex, '〇');
+        }
+    }
+    return replacedText;
+}
+
 // --- Data and UI Update Functions ---
 
 function loadAndDisplayText() {
@@ -255,7 +292,7 @@ function updateCharCount(text) {
   }
 }
 
-function addTimestamp(options = {}) {
+async function addTimestamp(options = {}) {
     const { stayInEditMode = false } = options;
     const video = document.querySelector('video');
     if (!video) return;
@@ -263,7 +300,8 @@ function addTimestamp(options = {}) {
 
     if (stayInEditMode && editor.tagName === 'TEXTAREA') {
         const currentText = editor.value;
-        const newText = currentText + timestampText;
+        let newText = currentText + timestampText;
+        newText = await replaceNgWords(newText);
         editor.value = newText;
         editor.scrollTop = editor.scrollHeight;
         editor.focus();
@@ -271,7 +309,7 @@ function addTimestamp(options = {}) {
         updateCharCount(newText);
         chrome.runtime.sendMessage({ action: "saveText", videoId: currentVideoId, text: newText });
     } else {
-        chrome.runtime.sendMessage({ action: "loadText", videoId: currentVideoId }, (response) => {
+        chrome.runtime.sendMessage({ action: "loadText", videoId: currentVideoId }, async (response) => {
             const currentText = (response && response.text) ? response.text : "";
             let textToSave = currentText;
 
@@ -280,6 +318,7 @@ function addTimestamp(options = {}) {
                 textToSave = "タイムスタンプ（編集中）  ※ネタバレ注意\n\n";
             }
             textToSave += timestampText; // Add the new timestamp
+            textToSave = await replaceNgWords(textToSave);
             
             chrome.runtime.sendMessage({ action: "saveText", videoId: currentVideoId, text: textToSave }, () => {
                 switchToEditMode(textToSave, { scrollToBottom: true });
@@ -296,9 +335,11 @@ function handleGeneralShortcuts(event) {
   if (!video) return;
 
   if (isEditing) {
+      // In edit mode, we only handle Shift+Enter for timestamps (handled in switchToEditMode)
       return;
   }
 
+  // The following shortcuts only work in display mode
   if (event.key === 'g') {
     event.preventDefault();
     if (mainContainer) {
@@ -328,9 +369,10 @@ function handleGeneralShortcuts(event) {
     event.preventDefault();
     if (currentClipTime) {
         const textToAppend = ` - ${currentClipTime}  `;
-        chrome.runtime.sendMessage({ action: "loadText", videoId: currentVideoId }, (response) => {
+        chrome.runtime.sendMessage({ action: "loadText", videoId: currentVideoId }, async (response) => {
             const currentText = (response && response.text) ? response.text : "";
-            const newText = currentText + textToAppend;
+            let newText = currentText + textToAppend;
+            newText = await replaceNgWords(newText);
             chrome.runtime.sendMessage({ action: "saveText", videoId: currentVideoId, text: newText }, () => {
                 switchToEditMode(newText, { scrollToBottom: true });
             });
