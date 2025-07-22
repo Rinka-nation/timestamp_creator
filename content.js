@@ -1,14 +1,21 @@
 console.log("Content script loaded!");
 
-// --- Global State ---
-let mainContainer = null;
-let editor = null; // This will be our single, switchable editor element
-let charCountDisplay = null;
-let warningDisplay = null; // For shadowban warnings
-let currentVideoId = null;
-let currentClipTime = null;
-let isEditing = false; // To track application mode (editing vs. display)
-let selectedTimestampSpan = null; // To track the selected timestamp span
+// --- Global State (Encapsulated) ---
+const state = {
+  mainContainer: null,
+  editor: null,
+  charCountDisplay: null,
+  warningDisplay: null,
+  currentVideoId: null,
+  currentClipTime: null,
+  isEditing: false,
+  selectedTimestampSpan: null,
+};
+
+// --- Constants ---
+const HIGHLIGHT_YELLOW = 'rgba(255, 255, 0, 0.3)';
+const HIGHLIGHT_RED = 'rgba(255, 99, 71, 0.4)';
+const HIGHLIGHT_NONE = 'transparent';
 
 document.addEventListener('keydown', (event) => {
   if(event.key === ']'){ 
@@ -96,11 +103,11 @@ function isPotentiallyBanned(formattedTimeString) {
 }
 
 function updateSpanStyles() {
-    if (isEditing || !editor) return;
+    if (state.isEditing || !state.editor) return;
 
     let hasBannedTimestamp = false;
 
-    editor.querySelectorAll('span').forEach(span => {
+    state.editor.querySelectorAll('span').forEach(span => {
         const formattedText = span.textContent; // Get the formatted string directly
         const isBanned = isPotentiallyBanned(formattedText);
 
@@ -109,21 +116,21 @@ function updateSpanStyles() {
         }
 
         // Apply styles based on priority: Selected > Banned > Normal
-        if (span === selectedTimestampSpan) {
-            span.style.backgroundColor = 'rgba(255, 255, 0, 0.3)'; // Yellow for selected
+        if (span === state.selectedTimestampSpan) {
+            span.style.backgroundColor = HIGHLIGHT_YELLOW;
         } else if (isBanned) {
-            span.style.backgroundColor = 'rgba(255, 99, 71, 0.4)'; // Red for banned
+            span.style.backgroundColor = HIGHLIGHT_RED;
         } else {
-            span.style.backgroundColor = 'transparent'; // Normal
+            span.style.backgroundColor = HIGHLIGHT_NONE;
         }
     });
 
-    if (warningDisplay) {
+    if (state.warningDisplay) {
         if (hasBannedTimestamp) {
-            warningDisplay.textContent = "警告: シャドウバンの可能性があるタイムスタンプが含まれています。";
-            warningDisplay.style.display = 'block';
+            state.warningDisplay.textContent = "警告: シャドウバンの可能性があるタイムスタンプが含まれています。";
+            state.warningDisplay.style.display = 'block';
         } else {
-            warningDisplay.style.display = 'none';
+            state.warningDisplay.style.display = 'none';
         }
     }
 }
@@ -161,8 +168,8 @@ function isYouTubeLive() {
 
 // --- Main Logic ---
 function initExtension() {
-  currentVideoId = getVideoIdFromUrl(window.location.href);
-  if (!currentVideoId) {
+  state.currentVideoId = getVideoIdFromUrl(window.location.href);
+  if (!state.currentVideoId) {
     console.error("Timestamp Helper: Could not find video ID. URL:", window.location.href);
     return;
   }
@@ -170,14 +177,14 @@ function initExtension() {
   createMainContainer();
   loadAndDisplayText();
   chrome.storage.local.get('mainContainerHidden', (data) => {
-    if (mainContainer) {
-      mainContainer.hidden = data.mainContainerHidden || false;
+    if (state.mainContainer) {
+      state.mainContainer.hidden = data.mainContainerHidden || false;
     }
   });
   window.addEventListener('yt-navigate-finish', () => {
     const newVideoId = getVideoIdFromUrl(window.location.href);
-    if (newVideoId && newVideoId !== currentVideoId) {
-      currentVideoId = newVideoId;
+    if (newVideoId && newVideoId !== state.currentVideoId) {
+      state.currentVideoId = newVideoId;
       loadAndDisplayText();
     }
   });
@@ -185,70 +192,70 @@ function initExtension() {
 
 function createMainContainer() {
   if (document.getElementById('youtube-timestamp-main-container')) return;
-  mainContainer = document.createElement('div');
-  Object.assign(mainContainer.style, {
+  state.mainContainer = document.createElement('div');
+  Object.assign(state.mainContainer.style, {
     position: 'fixed', top: '80px', right: '20px', width: '400px', height: '300px',
     zIndex: '10001', backgroundColor: 'rgba(20, 20, 20, 0.95)', border: '1px solid #505050',
     borderRadius: '6px', resize: 'both', overflow: 'hidden', display: 'flex', flexDirection: 'column'
   });
-  mainContainer.id = 'youtube-timestamp-main-container';
+  state.mainContainer.id = 'youtube-timestamp-main-container';
   const header = document.createElement('div');
   Object.assign(header.style, {
     backgroundColor: '#333', color: '#E0E0E0', padding: '5px 10px',
     cursor: 'grab', textAlign: 'center', flexShrink: '0'
   });
   header.textContent = 'Timestamp Helper';
-  mainContainer.appendChild(header);
+  state.mainContainer.appendChild(header);
   const contentArea = document.createElement('div');
   Object.assign(contentArea.style, {
       display: 'flex', flexGrow: '1', overflow: 'auto'
   });
-  mainContainer.appendChild(contentArea);
+  state.mainContainer.appendChild(contentArea);
   switchToDisplayMode("");
   
   const footer = document.createElement('div');
   footer.style.flexShrink = '0';
-  mainContainer.appendChild(footer);
+  state.mainContainer.appendChild(footer);
 
-  warningDisplay = document.createElement('div');
-  Object.assign(warningDisplay.style, {
+  state.warningDisplay = document.createElement('div');
+  Object.assign(state.warningDisplay.style, {
       backgroundColor: '#5a3d3d', color: '#ffcccc', padding: '5px 10px',
       textAlign: 'center', fontSize: '12px', display: 'none'
   });
-  footer.appendChild(warningDisplay);
+  footer.appendChild(state.warningDisplay);
 
-  charCountDisplay = document.createElement('div');
-  Object.assign(charCountDisplay.style, {
+  state.charCountDisplay = document.createElement('div');
+  Object.assign(state.charCountDisplay.style, {
     backgroundColor: '#333', color: '#E0E0E0', padding: '5px 10px',
     textAlign: 'right', fontSize: '11px'
   });
-  footer.appendChild(charCountDisplay);
+  footer.appendChild(state.charCountDisplay);
 
-  document.body.appendChild(mainContainer);
-  makeDraggable(mainContainer, header);
+  document.body.appendChild(state.mainContainer);
+  makeDraggable(state.mainContainer, header);
 }
 
 // --- Mode Switching Logic ---
 function switchToDisplayMode(text) {
-    selectedTimestampSpan = null;
-    isEditing = false;
-    const contentArea = mainContainer.querySelector('div:nth-of-type(2)');
-    if (editor) contentArea.removeChild(editor);
-    editor = document.createElement('div');
-    editor.id = 'youtube-timestamp-display-area';
-    Object.assign(editor.style, {
+    state.selectedTimestampSpan = null;
+    state.isEditing = false;
+    const contentArea = state.mainContainer.querySelector('div:nth-of-type(2)');
+    if (state.editor) contentArea.removeChild(state.editor);
+    state.editor = document.createElement('div');
+    state.editor.id = 'youtube-timestamp-display-area';
+    Object.assign(state.editor.style, {
         flex: '1', padding: '10px', fontFamily: 'monospace', fontSize: '13px',
         color: '#E0E0E0', whiteSpace: 'pre-wrap', outline: 'none', overflowY: 'auto'
     });
     const formattedContent = text.replace(/(\d+:\d{2}:\d{2}|\d{1,2}:\d{2}(?!:))/g, '<span style="color: #3399FF; cursor: pointer; text-decoration: underline;">$&<\/span>');
-    editor.innerHTML = formattedContent;
-    editor.addEventListener('dblclick', (e) => {
-        const currentFullText = editor.textContent;
+    state.editor.innerHTML = formattedContent;
+    state.editor.addEventListener('dblclick', (e) => {
+        const currentFullText = state.editor.textContent;
         if (document.caretRangeFromPoint) {
             const range = document.caretRangeFromPoint(e.clientX, e.clientY);
             if (range) {
                 const preCaretRange = document.createRange();
-                preCaretRange.selectNodeContents(editor);
+                preCaretRange.selectNodeContents(state.editor);
                 preCaretRange.setEnd(range.startContainer, range.startOffset);
                 const caretOffset = preCaretRange.toString().length;
                 switchToEditMode(currentFullText, { caretPosition: caretOffset });
@@ -257,9 +264,9 @@ function switchToDisplayMode(text) {
         }
         switchToEditMode(currentFullText);
     });
-    editor.addEventListener('click', (e) => {
+    state.editor.addEventListener('click', (e) => {
         if (e.target.tagName === 'SPAN') {
-            selectedTimestampSpan = e.target;
+            state.selectedTimestampSpan = e.target;
             updateSpanStyles();
             if (!isYouTubeLive()) {
                 const video = document.querySelector('video');
@@ -271,63 +278,63 @@ function switchToDisplayMode(text) {
             }
         }
     });
-    contentArea.appendChild(editor);
+    contentArea.appendChild(state.editor);
     updateCharCount(text);
     updateSpanStyles();
 }
 
 function switchToEditMode(currentText, options = {}) {
     const { caretPosition = -1, scrollToBottom = false } = options;
-    isEditing = true;
-    const contentArea = mainContainer.querySelector('div:nth-of-type(2)');
-    if (editor) contentArea.removeChild(editor);
-    editor = document.createElement('textarea');
-    editor.id = "youtube-timestamp-textarea";
-    Object.assign(editor.style, {
+    state.isEditing = true;
+    const contentArea = state.mainContainer.querySelector('div:nth-of-type(2)');
+    if (state.editor) contentArea.removeChild(state.editor);
+    state.editor = document.createElement('textarea');
+    state.editor.id = "youtube-timestamp-textarea";
+    Object.assign(state.editor.style, {
         flex: '1', border: 'none', backgroundColor: 'transparent', color: '#E0E0E0',
         padding: '10px', fontFamily: 'monospace', fontSize: '13px', resize: 'none', outline: 'none'
     });
-    editor.setAttribute("spellcheck", "false");
-    editor.value = currentText;
+    state.editor.setAttribute("spellcheck", "false");
+    state.editor.value = currentText;
     let isComposing = false;
-    editor.addEventListener('compositionstart', () => { isComposing = true; });
-    editor.addEventListener('compositionend', (event) => {
+    state.editor.addEventListener('compositionstart', () => { isComposing = true; });
+    state.editor.addEventListener('compositionend', (event) => {
         isComposing = false;
         event.target.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    editor.addEventListener('input', async () => {
+    state.editor.addEventListener('input', async () => {
         if (isComposing) return;
-        const newText = editor.value;
+        const newText = state.editor.value;
         const replacedText = await replaceNgWords(newText);
-        chrome.runtime.sendMessage({ action: "saveText", videoId: currentVideoId, text: replacedText });
+        chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: replacedText });
         updateCharCount(replacedText);
         if (newText !== replacedText) {
-            const cursorPos = editor.selectionStart;
-            editor.value = replacedText;
-            editor.selectionStart = editor.selectionEnd = cursorPos;
+            const cursorPos = state.editor.selectionStart;
+            state.editor.value = replacedText;
+            state.editor.selectionStart = state.editor.selectionEnd = cursorPos;
         }
         updateSpanStyles();
     });
-    editor.addEventListener('blur', () => {
-        switchToDisplayMode(editor.value);
+    state.editor.addEventListener('blur', () => {
+        switchToDisplayMode(state.editor.value);
     });
-    editor.addEventListener('keydown', (event) => {
+    state.editor.addEventListener('keydown', (event) => {
         if (event.shiftKey && event.key === "Enter") {
             event.preventDefault();
             addTimestamp({ stayInEditMode: true });
         }
     });
-    contentArea.appendChild(editor);
+    contentArea.appendChild(state.editor);
     if (caretPosition !== -1) {
-        editor.selectionStart = editor.selectionEnd = caretPosition;
+        state.editor.selectionStart = state.editor.selectionEnd = caretPosition;
     }
-    editor.focus();
+    state.editor.focus();
     updateCharCount(currentText);
     updateSpanStyles();
 }
 
 function escapeRegExp(string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\$&');
+  return string.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
 }
 
 async function replaceNgWords(text) {
@@ -347,23 +354,23 @@ async function replaceNgWords(text) {
 
 // --- Data and UI Update Functions ---
 function loadAndDisplayText() {
-  if (!currentVideoId) return;
-  chrome.runtime.sendMessage({ action: "loadText", videoId: currentVideoId }, (response) => {
+  if (!state.currentVideoId) return;
+  chrome.runtime.sendMessage({ action: "loadText", videoId: state.currentVideoId }, (response) => {
     const text = (response && response.text) ? response.text : "";
-    if (!isEditing) {
+    if (!state.isEditing) {
         switchToDisplayMode(text);
     } else {
-        editor.value = text;
+        state.editor.value = text;
     }
     if (!response || !response.text) {
-        chrome.runtime.sendMessage({ action: "saveText", videoId: currentVideoId, text: text });
+        chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: text });
     }
   });
 }
 
 function updateCharCount(text) {
-  if (charCountDisplay) {
-    charCountDisplay.textContent = `現在の文字数: ${text.length}`;
+  if (state.charCountDisplay) {
+    state.charCountDisplay.textContent = `現在の文字数: ${text.length}`;
   }
 }
 
@@ -378,19 +385,19 @@ async function addTimestamp(options = {}) {
 
     const timestampText = `${prefix}${formatTime(video.currentTime)}${suffix}`;
 
-    if (stayInEditMode && editor.tagName === 'TEXTAREA') {
-        const currentText = editor.value;
+    if (stayInEditMode && state.editor.tagName === 'TEXTAREA') {
+        const currentText = state.editor.value;
         let newText = currentText + timestampText;
         newText = await replaceNgWords(newText);
-        editor.value = newText;
-        editor.scrollTop = editor.scrollHeight;
-        editor.focus();
-        editor.selectionStart = editor.selectionEnd = newText.length;
+        state.editor.value = newText;
+        state.editor.scrollTop = state.editor.scrollHeight;
+        state.editor.focus();
+        state.editor.selectionStart = state.editor.selectionEnd = newText.length;
         updateCharCount(newText);
-        chrome.runtime.sendMessage({ action: "saveText", videoId: currentVideoId, text: newText });
+        chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: newText });
         updateSpanStyles();
     } else {
-        chrome.runtime.sendMessage({ action: "loadText", videoId: currentVideoId }, async (response) => {
+        chrome.runtime.sendMessage({ action: "loadText", videoId: state.currentVideoId }, async (response) => {
             const currentText = (response && response.text) ? response.text : "";
             let textToSave = currentText;
             if (textToSave.trim() === "") {
@@ -398,7 +405,7 @@ async function addTimestamp(options = {}) {
             }
             textToSave += timestampText;
             textToSave = await replaceNgWords(textToSave);
-            chrome.runtime.sendMessage({ action: "saveText", videoId: currentVideoId, text: textToSave }, () => {
+            chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: textToSave }, () => {
                 switchToEditMode(textToSave, { scrollToBottom: true });
             });
         });
@@ -407,16 +414,16 @@ async function addTimestamp(options = {}) {
 
 // --- Event Handlers ---
 function adjustSelectedTimestamp(delta) {
-    if (!selectedTimestampSpan) return;
-    let seconds = parseTime(selectedTimestampSpan.textContent);
+    if (!state.selectedTimestampSpan) return;
+    let seconds = parseTime(state.selectedTimestampSpan.textContent);
     seconds += delta;
     if (seconds < 0) seconds = 0;
     const newTime = formatTime(seconds);
-    selectedTimestampSpan.textContent = newTime;
-    const fullText = editor.textContent;
+    state.selectedTimestampSpan.textContent = newTime;
+    const fullText = state.editor.textContent;
     chrome.runtime.sendMessage({
         action: "saveText",
-        videoId: currentVideoId,
+        videoId: state.currentVideoId,
         text: fullText
     });
     updateCharCount(fullText);
@@ -426,10 +433,10 @@ function adjustSelectedTimestamp(delta) {
 function handleGeneralShortcuts(event) {
   const video = document.querySelector('video');
   if (!video) return;
-  if (isEditing) {
+  if (state.isEditing) {
       return;
   }
-    if (selectedTimestampSpan) {
+    if (state.selectedTimestampSpan) {
         if (event.key === 'ArrowUp') {
             event.preventDefault();
             adjustSelectedTimestamp(1);
@@ -440,9 +447,9 @@ function handleGeneralShortcuts(event) {
     }
   if (event.key === 'g') {
     event.preventDefault();
-    if (mainContainer) {
-      mainContainer.hidden = !mainContainer.hidden;
-            chrome.storage.local.set({ mainContainerHidden: mainContainer.hidden });
+    if (state.mainContainer) {
+      state.mainContainer.hidden = !state.mainContainer.hidden;
+            chrome.storage.local.set({ mainContainerHidden: state.mainContainer.hidden });
     }
   }
   if (event.shiftKey && event.key === "Enter") {
@@ -457,17 +464,17 @@ function handleGeneralShortcuts(event) {
     event.preventDefault();
     const time = formatTime(video.currentTime);
     copyToClipboard(time);
-    currentClipTime = time;
+    state.currentClipTime = time;
   }
   if (event.key === "y") {
     event.preventDefault();
-    if (currentClipTime) {
-        const textToAppend = ` - ${currentClipTime}  `;
-        chrome.runtime.sendMessage({ action: "loadText", videoId: currentVideoId }, async (response) => {
+    if (state.currentClipTime) {
+        const textToAppend = ` - ${state.currentClipTime}  `;
+        chrome.runtime.sendMessage({ action: "loadText", videoId: state.currentVideoId }, async (response) => {
             const currentText = (response && response.text) ? response.text : "";
             let newText = currentText + textToAppend;
             newText = await replaceNgWords(newText);
-            chrome.runtime.sendMessage({ action: "saveText", videoId: currentVideoId, text: newText }, () => {
+            chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: newText }, () => {
                 switchToEditMode(newText, { scrollToBottom: true });
             });
         });
@@ -505,9 +512,9 @@ function makeDraggable(element, dragHandle) {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "clearTextInContent") {
     const newText = "";
-    chrome.runtime.sendMessage({ action: "saveText", videoId: currentVideoId, text: newText }, () => {
-        if (isEditing) {
-            editor.value = newText;
+    chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: newText }, () => {
+        if (state.isEditing) {
+            state.editor.value = newText;
         }
         else {
             switchToDisplayMode(newText);
