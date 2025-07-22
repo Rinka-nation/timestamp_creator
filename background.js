@@ -9,7 +9,7 @@ async function manageStorage() {
     const usage = await STORAGE.getBytesInUse(null);
 
     if (usage / QUOTA_BYTES > THRESHOLD) {
-        console.log("Storage usage exceeds threshold. Cleaning up...");
+        
 
         // Filter for video timestamp items and find the oldest one
         const videoItems = Object.entries(items).filter(([key, value]) => key.startsWith('video_') && value.timestamp);
@@ -21,7 +21,7 @@ async function manageStorage() {
         const oldestKey = videoItems[0][0];
         
         await STORAGE.remove(oldestKey);
-        console.log(`Removed oldest item: ${oldestKey}`);
+        
 
         // Notify the user
         chrome.notifications.create({

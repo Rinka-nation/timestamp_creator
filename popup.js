@@ -71,21 +71,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Timestamp Format Settings (format-settings-page) ---
     const prefixInput = document.getElementById('prefix-input');
     const suffixInput = document.getElementById('suffix-input');
+    const defaultTimestampTextInput = document.getElementById('default-timestamp-text-input');
     const saveFormatSettingsButton = document.getElementById('save-format-settings');
     const formatSaveStatus = document.getElementById('format-save-status');
     const formatDemoDisplay = document.getElementById('format-demo-display');
 
     async function loadFormatSettings() {
-        const data = await chrome.storage.local.get(['timestampPrefix', 'timestampSuffix']);
+        const data = await chrome.storage.local.get(['timestampPrefix', 'timestampSuffix', 'defaultTimestampText']);
         prefixInput.value = data.timestampPrefix !== undefined ? data.timestampPrefix : ' - ';
         suffixInput.value = data.timestampSuffix !== undefined ? data.timestampSuffix : '  ';
+        defaultTimestampTextInput.value = data.defaultTimestampText !== undefined ? data.defaultTimestampText : 'タイムスタンプ（編集中）  ※ネタバレ注意\n\n';
         updateFormatDemo();
     }
 
     async function saveFormatSettings() {
         const prefix = prefixInput.value;
         const suffix = suffixInput.value;
-        await chrome.storage.local.set({ timestampPrefix: prefix, timestampSuffix: suffix });
+        const defaultText = defaultTimestampTextInput.value;
+        await chrome.storage.local.set({ timestampPrefix: prefix, timestampSuffix: suffix, defaultTimestampText: defaultText });
         formatSaveStatus.textContent = '保存しました！';
         setTimeout(() => formatSaveStatus.textContent = '', 2000);
         updateFormatDemo();
@@ -94,13 +97,15 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateFormatDemo() {
         const prefix = prefixInput.value;
         const suffix = suffixInput.value;
+        const defaultText = defaultTimestampTextInput.value;
         const demoTime = "01:23"; // Example time
         const demoMemo = "ここ好き"
-        formatDemoDisplay.textContent = `${prefix}${demoTime}${suffix}${demoMemo}`;
+        formatDemoDisplay.textContent = `${defaultText.replace(/\\n/g, '\n')}${prefix}${demoTime}${suffix}${demoMemo}`;
     }
 
     prefixInput.addEventListener('input', updateFormatDemo);
     suffixInput.addEventListener('input', updateFormatDemo);
+    defaultTimestampTextInput.addEventListener('input', updateFormatDemo);
     saveFormatSettingsButton.addEventListener('click', saveFormatSettings);
 
 
@@ -109,13 +114,13 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch(`https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v=${videoId}&format=json`);
             if (!response.ok) {
-                console.warn(`Could not fetch title for ${videoId}. Status: ${response.status}`);
+                
                 return videoId;
             }
             const data = await response.json();
             return data.title || videoId;
         } catch (error) {
-            console.error(`Error fetching title for ${videoId}:`, error);
+            
             return videoId;
         }
     }
@@ -138,7 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }));
             renderList(itemsWithTitles);
         } catch (error) {
-            console.error("Error loading timestamps:", error);
+            
             listContainer.innerHTML = '<p>Error loading data. See console.</p>';
         }
     }
@@ -199,7 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (confirm(`Are you sure you want to delete the data for video: ${videoId}?`)) {
             chrome.runtime.sendMessage({ action: "deleteVideoData", videoId: videoId }, (response) => {
                 if (response && response.status === 'deleted') {
-                    console.log(`Successfully deleted data for ${response.videoId}`);
+                    
                     loadAndRenderTimestamps();
                 }
             });

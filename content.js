@@ -1,4 +1,4 @@
-console.log("Content script loaded!");
+
 
 // --- Global State (Encapsulated) ---
 const state = {
@@ -20,21 +20,21 @@ const HIGHLIGHT_NONE = 'transparent';
 document.addEventListener('keydown', (event) => {
   if(event.key === ']'){ 
     initExtension();
-    console.log("再読み込み");
+    
   }
 });
 
 // --- Initialization Observer ---
 const observer = new MutationObserver((mutations, obs) => {
   if (document.querySelector("#info-contents")) {
-    console.log("Observer found #info-contents, initializing extension.");
+    
     obs.disconnect();
     initExtension();
   }
 });
 observer.observe(document.body, { childList: true, subtree: true });
 if (document.querySelector("#info-contents")) {
-  console.log("Element #info-contents already present, initializing extension.");
+  
   initExtension();
 }
 
@@ -137,9 +137,9 @@ function updateSpanStyles() {
 
 function copyToClipboard(text) {
   navigator.clipboard.writeText(text).then(() => {
-    console.log("Copied to clipboard: " + text);
+    
   }).catch(err => {
-    console.error("Failed to copy", err);
+    
   });
 }
 
@@ -170,7 +170,7 @@ function isYouTubeLive() {
 function initExtension() {
   state.currentVideoId = getVideoIdFromUrl(window.location.href);
   if (!state.currentVideoId) {
-    console.error("Timestamp Helper: Could not find video ID. URL:", window.location.href);
+    
     return;
   }
   document.addEventListener('keydown', handleGeneralShortcuts);
@@ -274,7 +274,7 @@ function switchToDisplayMode(text) {
                     video.currentTime = parseTime(e.target.textContent);
                 }
             } else {
-                console.log("Timestamp click disabled: Video is live.");
+                
             }
         }
     });
