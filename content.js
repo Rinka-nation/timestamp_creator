@@ -320,8 +320,6 @@ function switchToEditMode(currentText, options = {}) {
     contentArea.appendChild(editor);
     if (caretPosition !== -1) {
         editor.selectionStart = editor.selectionEnd = caretPosition;
-    } else if (scrollToBottom) {
-        editor.scrollTop = editor.scrollHeight;
     }
     editor.focus();
     updateCharCount(currentText);
@@ -373,7 +371,13 @@ async function addTimestamp(options = {}) {
     const { stayInEditMode = false } = options;
     const video = document.querySelector('video');
     if (!video) return;
-    const timestampText = ` - ${formatTime(video.currentTime)}  `;
+
+    const storedSettings = await chrome.storage.local.get(['timestampPrefix', 'timestampSuffix']);
+    const prefix = storedSettings.timestampPrefix !== undefined ? storedSettings.timestampPrefix : ' - ';
+    const suffix = storedSettings.timestampSuffix !== undefined ? storedSettings.timestampSuffix : '  ';
+
+    const timestampText = `${prefix}${formatTime(video.currentTime)}${suffix}`;
+
     if (stayInEditMode && editor.tagName === 'TEXTAREA') {
         const currentText = editor.value;
         let newText = currentText + timestampText;

@@ -3,27 +3,79 @@
 <head>
   <meta charset="UTF-8">
   <title>YouTube Timestamp Helper</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      width: 300px; /* 少し幅を広げます */
-      padding: 10px;
-    }
-    /* リスト内のボタンに影響しないように、このファイルではボタンのグローバルスタイルを削除 */
-  </style>
+  <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div id="timestamps-list"></div>
 
-  <hr>
-  <h3>NGワード設定</h3>
-  <p>NGワードを1行に1つずつ入力してください。</p>
-  <textarea id="ng-words-textarea" rows="5" style="width: 95%;"></textarea>
-  <button id="save-ng-words">保存</button>
-  <p id="save-status" style="color: green;"></p>
+  <div id="home-page" class="page active">
+    <h2>ホーム</h2>
+    <button class="nav-button" data-target="timestamps-page"><img src="icons/trash_can.png" class="button-icon">タイムスタンプ管理</button>
+    <button class="nav-button" data-target="format-settings-page"><img src="icons/setting.png" class="button-icon">タイムスタンプ形式設定</button>
+    <button class="nav-button" data-target="ng-words-page"><img src="icons/NG_word.png" class="button-icon">NGワード設定</button>
+    <button class="nav-button" data-target="help-page">使い方・ショートカット</button>
+  </div>
 
-  <h4>現在のNGワード:</h4>
-  <div id="current-ng-words"></div>
+  <div id="timestamps-page" class="page">
+    <h2>タイムスタンプ管理</h2>
+    <div id="timestamps-list"></div>
+    <button class="back-button" data-target="home-page">ホームに戻る</button>
+  </div>
+
+  <div id="format-settings-page" class="page">
+    <h2>タイムスタンプ形式設定</h2>
+    <p>タイムスタンプの前後に追加される文字列を設定します。</p>
+    <div>
+      <label for="prefix-input">プレフィックス:</label>
+      <input type="text" id="prefix-input">
+    </div>
+    <div style="margin-top: 10px;">
+      <label for="suffix-input">サフィックス:</label>
+      <input type="text" id="suffix-input">
+    </div>
+    <div id="format-demo-display" style="margin-top: 15px; padding: 10px; border: 1px solid #ddd; background-color: #f9f9f9; font-family: monospace;"></div>
+    <button id="save-format-settings">保存</button>
+    <p id="format-save-status" style="color: green;"></p>
+    <button class="back-button" data-target="home-page">ホームに戻る</button>
+  </div>
+
+  <div id="ng-words-page" class="page">
+    <h2>NGワード設定</h2>
+    <p>NGワードを1行に1つずつ入力してください。</p>
+    <textarea id="ng-words-textarea" rows="5"></textarea>
+    <button id="save-ng-words">保存</button>
+    <p id="save-status" style="color: green;"></p>
+    <h4>現在のNGワード:</h4>
+    <div id="current-ng-words"></div>
+    <button class="back-button" data-target="home-page">ホームに戻る</button>
+  </div>
+
+  <div id="help-page" class="page">
+    <h2>使い方・ショートカット</h2>
+    <h3>基本操作</h3>
+    <ul>
+      <li>動画ページで拡張機能のアイコンをクリックすると、タイムスタンプヘルパーが表示されます。</li>
+      <li>タイムスタンプは自動で保存されます。</li>
+    </ul>
+    <h3>ショートカットキー</h3>
+    <ul>
+      <li><strong>Shift + Enter または Pキー:</strong> 現在の動画時間にタイムスタンプを追加します。</li>
+      <li><strong>Gキー:</strong> タイムスタンプヘルパーの表示/非表示を切り替えます。</li>
+      <li><strong>Uキー:</strong> 現在の動画時間をクリップボードにコピーします。</li>
+      <li><strong>Yキー:</strong> 最後にコピーした時間をタイムスタンプとして追加します。</li>
+      <li><strong>表示モードでタイムスタンプをクリック:</strong> その時間へ動画をシークします。</li>
+      <li><strong>表示モードでウィンドウをダブルクリック:</strong> 編集モードに切り替えます。</li>
+      <li><strong>表示モードでタイムスタンプを選択後、↑↓キー:</strong> 選択したタイムスタンプの秒数を1秒単位で増減します。</li>
+    </ul>
+    <h3>NGワード機能</h3>
+    <ul>
+      <li>設定したNGワードは、タイムスタンプのテキスト入力時に自動で「〇」に置換されます。</li>
+    </ul>
+    <h3>シャドウバン警告</h3>
+    <ul>
+      <li>シャドウバンの可能性があるタイムスタンプは、背景が赤色でハイライトされ、警告メッセージが表示されます。</li>
+    </ul>
+    <button class="back-button" data-target="home-page">ホームに戻る</button>
+  </div>
 
   <script src="popup.js"></script>
 </body>
