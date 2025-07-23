@@ -40,6 +40,37 @@ h2 {
   border-bottom: 1px solid #eee;
   padding-bottom: 5px;
   margin-bottom: 15px;
+  margin-top: 0; /* Remove default margin */
+}
+
+.header-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #eee;
+  margin-bottom: 15px;
+}
+
+.header-container h2 {
+  border-bottom: none; /* Remove double border */
+  margin-bottom: 0;
+}
+
+.header-button {
+    background: none;
+    border: none;
+    padding: 5px;
+    cursor: pointer;
+}
+
+.header-button img {
+    width: 16px;
+    height: 16px;
+    filter: invert(50%);
+}
+
+.header-button:hover img {
+    filter: invert(20%);
 }
 
 button {

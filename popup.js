@@ -39,6 +39,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial page load
     showPage('home-page');
 
+    const reloadButton = document.getElementById('reload-extension-button');
+    reloadButton.addEventListener('click', () => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0] && tabs[0].id) {
+          chrome.tabs.sendMessage(tabs[0].id, { action: "reloadExtension" }, (response) => {
+            if (chrome.runtime.lastError) {
+              // content.jsが読み込まれていないページで押された場合のエラーハンドリング
+              console.log('Could not establish connection. Reloading the page might be necessary.');
+              // 必要であればユーザーにフィードバックを表示
+            } else {
+              console.log(response.status); // "reloaded"
+            }
+          });
+        }
+      });
+    });
+
 
     // --- Timestamps List (timestamps-page) ---
     const listContainer = document.getElementById('timestamps-list');

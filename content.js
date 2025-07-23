@@ -17,12 +17,7 @@ const HIGHLIGHT_YELLOW = 'rgba(255, 255, 0, 0.3)';
 const HIGHLIGHT_RED = 'rgba(255, 99, 71, 0.4)';
 const HIGHLIGHT_NONE = 'transparent';
 
-document.addEventListener('keydown', (event) => {
-  if(event.key === ']'){ 
-    initExtension();
-    
-  }
-});
+
 
 // --- Initialization Observer ---
 const observer = new MutationObserver((mutations, obs) => {
@@ -522,5 +517,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         }
         updateCharCount(newText);
     });
+  }
+  if (request.action === "reloadExtension") {
+    console.log("Reloading extension via popup button.");
+    initExtension();
+    sendResponse({ status: "reloaded" });
+    return true; // 非同期レスポンスのためにtrueを返す
   }
 });
