@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const formatSettingsPage = document.getElementById('format-settings-page');
     const ngWordsPage = document.getElementById('ng-words-page');
     const helpPage = document.getElementById('help-page');
+    const shortcutsPage = document.getElementById('shortcuts-page');
 
     // Navigation buttons
     document.querySelectorAll('.nav-button').forEach(button => {
@@ -33,6 +34,8 @@ document.addEventListener('DOMContentLoaded', () => {
             loadFormatSettings();
         } else if (pageId === 'ng-words-page') {
             loadNgWords();
+        } else if (pageId === 'shortcuts-page') {
+            loadShortcutSettings();
         }
     }
 
@@ -83,6 +86,83 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     saveNgWordsButton.addEventListener('click', saveNgWords);
+
+
+    // --- Shortcut Key Settings (shortcuts-page) ---
+    const shortcutInputs = {
+        addTimestamp: document.getElementById('shortcut-addTimestamp'),
+        addTimestampAlt: document.getElementById('shortcut-addTimestampAlt'),
+        toggleVisibility: document.getElementById('shortcut-toggleVisibility'),
+        copyTimestamp: document.getElementById('shortcut-copyTimestamp'),
+        pasteTimestamp: document.getElementById('shortcut-pasteTimestamp'),
+    };
+    const saveShortcutsButton = document.getElementById('save-shortcuts');
+    const resetShortcutsButton = document.getElementById('reset-shortcuts');
+    const shortcutSaveStatus = document.getElementById('shortcut-save-status');
+
+    const defaultShortcuts = {
+        addTimestamp: { key: 'Enter', shiftKey: true, ctrlKey: false, altKey: false, code: 'Enter' },
+        addTimestampAlt: { key: 'p', shiftKey: false, ctrlKey: false, altKey: false, code: 'KeyP' },
+        toggleVisibility: { key: 'g', shiftKey: false, ctrlKey: false, altKey: false, code: 'KeyG' },
+        copyTimestamp: { key: 'u', shiftKey: false, ctrlKey: false, altKey: false, code: 'KeyU' },
+        pasteTimestamp: { key: 'y', shiftKey: false, ctrlKey: false, altKey: false, code: 'KeyY' },
+    };
+
+    let currentShortcuts = {};
+
+    function keyEventToString(shortcut) {
+        let parts = [];
+        if (shortcut.ctrlKey) parts.push('Ctrl');
+        if (shortcut.altKey) parts.push('Alt');
+        if (shortcut.shiftKey) parts.push('Shift');
+        parts.push(shortcut.key.toUpperCase());
+        return parts.join(' + ');
+    }
+
+    function handleShortcutInput(event) {
+        event.preventDefault();
+        const inputId = event.target.id.replace('shortcut-', '');
+        const newShortcut = {
+            key: event.key,
+            code: event.code,
+            ctrlKey: event.ctrlKey,
+            altKey: event.altKey,
+            shiftKey: event.shiftKey,
+        };
+        event.target.value = keyEventToString(newShortcut);
+        currentShortcuts[inputId] = newShortcut;
+    }
+
+    async function loadShortcutSettings() {
+        const data = await chrome.storage.local.get('shortcuts');
+        currentShortcuts = { ...defaultShortcuts, ...(data.shortcuts || {}) };
+        for (const id in shortcutInputs) {
+            if (shortcutInputs[id]) { // null check
+                shortcutInputs[id].value = keyEventToString(currentShortcuts[id]);
+            }
+        }
+    }
+
+    async function saveShortcutSettings() {
+        await chrome.storage.local.set({ shortcuts: currentShortcuts });
+        shortcutSaveStatus.textContent = '保存しました！';
+        setTimeout(() => shortcutSaveStatus.textContent = '', 2000);
+    }
+
+    function resetShortcutSettings() {
+        currentShortcuts = { ...defaultShortcuts };
+        for (const id in shortcutInputs) {
+            if (shortcutInputs[id]) { // null check
+                shortcutInputs[id].value = keyEventToString(currentShortcuts[id]);
+            }
+        }
+    }
+
+    for (const id in shortcutInputs) {
+        shortcutInputs[id].addEventListener('keydown', handleShortcutInput);
+    }
+    saveShortcutsButton.addEventListener('click', saveShortcutSettings);
+    resetShortcutsButton.addEventListener('click', resetShortcutSettings);
 
 
     // --- Timestamp Format Settings (format-settings-page) ---

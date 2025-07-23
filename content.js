@@ -10,6 +10,7 @@ const state = {
   currentClipTime: null,
   isEditing: false,
   selectedTimestampSpan: null,
+  shortcuts: {},
 };
 
 // --- Constants ---
@@ -138,6 +139,21 @@ function copyToClipboard(text) {
   });
 }
 
+function copyAllTextToClipboard(buttonElement) {
+    const textToCopy = state.isEditing ? state.editor.value : state.editor.textContent;
+    copyToClipboard(textToCopy);
+
+    // Provide user feedback
+    const originalText = buttonElement.textContent;
+    buttonElement.textContent = 'コピーしました！';
+    buttonElement.disabled = true;
+    
+    setTimeout(() => {
+        buttonElement.textContent = originalText;
+        buttonElement.disabled = false;
+    }, 1500);
+}
+
 function isYouTubeLive() {
   const durationDisplay = document.querySelector('.ytp-time-duration');
   if (durationDisplay && durationDisplay.textContent.trim() !== '' && durationDisplay.offsetWidth > 0 && durationDisplay.offsetHeight > 0) {
@@ -162,12 +178,23 @@ function isYouTubeLive() {
 }
 
 // --- Main Logic ---
-function initExtension() {
+async function initExtension() {
   state.currentVideoId = getVideoIdFromUrl(window.location.href);
   if (!state.currentVideoId) {
     
     return;
   }
+
+  const data = await chrome.storage.local.get('shortcuts');
+  const defaultShortcuts = {
+      addTimestamp: { key: 'Enter', shiftKey: true, ctrlKey: false, altKey: false, code: 'Enter' },
+      addTimestampAlt: { key: 'p', shiftKey: false, ctrlKey: false, altKey: false, code: 'KeyP' },
+      toggleVisibility: { key: 'g', shiftKey: false, ctrlKey: false, altKey: false, code: 'KeyG' },
+      copyTimestamp: { key: 'u', shiftKey: false, ctrlKey: false, altKey: false, code: 'KeyU' },
+      pasteTimestamp: { key: 'y', shiftKey: false, ctrlKey: false, altKey: false, code: 'KeyY' },
+  };
+  state.shortcuts = { ...defaultShortcuts, ...(data.shortcuts || {}) };
+
   document.addEventListener('keydown', handleGeneralShortcuts);
   createMainContainer();
   loadAndDisplayText();
@@ -181,6 +208,12 @@ function initExtension() {
     if (newVideoId && newVideoId !== state.currentVideoId) {
       state.currentVideoId = newVideoId;
       loadAndDisplayText();
+    }
+  });
+
+  chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === 'local' && changes.shortcuts) {
+      state.shortcuts = { ...state.shortcuts, ...changes.shortcuts.newValue };
     }
   });
 }
@@ -211,6 +244,45 @@ function createMainContainer() {
   const footer = document.createElement('div');
   footer.style.flexShrink = '0';
   state.mainContainer.appendChild(footer);
+
+  const buttonBar = document.createElement('div');
+  Object.assign(buttonBar.style, {
+      display: 'flex',
+      justifyContent: 'space-around',
+      padding: '5px',
+      backgroundColor: '#282828'
+  });
+
+  const buttonStyle = {
+      flex: '1',
+      padding: '8px 5px',
+      margin: '0 5px',
+      border: '1px solid #505050',
+      borderRadius: '4px',
+      backgroundColor: '#3e3e3e',
+      color: '#E0E0E0',
+      cursor: 'pointer',
+      fontSize: '12px',
+      outline: 'none'
+  };
+
+  const addTimestampButton = document.createElement('button');
+  addTimestampButton.textContent = 'タイムスタンプ追加';
+  Object.assign(addTimestampButton.style, buttonStyle);
+  addTimestampButton.addEventListener('click', () => addTimestamp());
+  addTimestampButton.onmouseover = () => { addTimestampButton.style.backgroundColor = '#555'; };
+  addTimestampButton.onmouseout = () => { addTimestampButton.style.backgroundColor = '#3e3e3e'; };
+
+  const copyAllButton = document.createElement('button');
+  copyAllButton.textContent = '全文コピー';
+  Object.assign(copyAllButton.style, buttonStyle);
+  copyAllButton.addEventListener('click', () => copyAllTextToClipboard(copyAllButton));
+  copyAllButton.onmouseover = () => { if (!copyAllButton.disabled) copyAllButton.style.backgroundColor = '#555'; };
+  copyAllButton.onmouseout = () => { if (!copyAllButton.disabled) copyAllButton.style.backgroundColor = '#3e3e3e'; };
+
+  buttonBar.appendChild(addTimestampButton);
+  buttonBar.appendChild(copyAllButton);
+  footer.appendChild(buttonBar);
 
   state.warningDisplay = document.createElement('div');
   Object.assign(state.warningDisplay.style, {
@@ -426,55 +498,71 @@ function adjustSelectedTimestamp(delta) {
     updateSpanStyles();
 }
 
-function handleGeneralShortcuts(event) {
+async function handleGeneralShortcuts(event) {
   const video = document.querySelector('video');
   if (!video) return;
+
   if (state.isEditing) {
+      // 編集モード中はaddTimestampのみをハンドル
+      if (isMatch(event, state.shortcuts.addTimestamp)) {
+          event.preventDefault();
+          addTimestamp({ stayInEditMode: true });
+      }
       return;
   }
-    if (state.selectedTimestampSpan) {
-        if (event.key === 'ArrowUp') {
-            event.preventDefault();
-            adjustSelectedTimestamp(1);
-        } else if (event.key === 'ArrowDown') {
-            event.preventDefault();
-            adjustSelectedTimestamp(-1);
-        }
-    }
-  if (event.key === 'g') {
-    event.preventDefault();
-    if (state.mainContainer) {
-      state.mainContainer.hidden = !state.mainContainer.hidden;
-            chrome.storage.local.set({ mainContainerHidden: state.mainContainer.hidden });
-    }
+
+  if (state.selectedTimestampSpan) {
+      if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          adjustSelectedTimestamp(1);
+      } else if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          adjustSelectedTimestamp(-1);
+      }
   }
-  if (event.shiftKey && event.key === "Enter") {
-    event.preventDefault();
-    addTimestamp();
+
+  // ショートカットキーの判定ヘルパー関数
+  function isMatch(event, shortcut) {
+      if (!shortcut) return false; // ショートカットが未定義の場合
+      return event.key === shortcut.key &&
+             event.shiftKey === shortcut.shiftKey &&
+             event.ctrlKey === shortcut.ctrlKey &&
+             event.altKey === shortcut.altKey;
   }
-  if (event.key === "p") {
-    event.preventDefault();
-    addTimestamp();
-  }
-  if (event.key === "u") {
-    event.preventDefault();
-    const time = formatTime(video.currentTime);
-    copyToClipboard(time);
-    state.currentClipTime = time;
-  }
-  if (event.key === "y") {
-    event.preventDefault();
-    if (state.currentClipTime) {
-        const textToAppend = ` - ${state.currentClipTime}  `;
-        chrome.runtime.sendMessage({ action: "loadText", videoId: state.currentVideoId }, async (response) => {
-            const currentText = (response && response.text) ? response.text : "";
-            let newText = currentText + textToAppend;
-            newText = await replaceNgWords(newText);
-            chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: newText }, () => {
-                switchToEditMode(newText, { scrollToBottom: true });
-            });
-        });
-    }
+
+  if (isMatch(event, state.shortcuts.toggleVisibility)) {
+      event.preventDefault();
+      if (state.mainContainer) {
+          state.mainContainer.hidden = !state.mainContainer.hidden;
+          chrome.storage.local.set({ mainContainerHidden: state.mainContainer.hidden });
+      }
+  } else if (isMatch(event, state.shortcuts.addTimestamp)) {
+      event.preventDefault();
+      addTimestamp();
+  } else if (isMatch(event, state.shortcuts.addTimestampAlt)) {
+      event.preventDefault();
+      addTimestamp();
+  } else if (isMatch(event, state.shortcuts.copyTimestamp)) {
+      event.preventDefault();
+      const time = formatTime(video.currentTime);
+      copyToClipboard(time);
+      state.currentClipTime = time;
+  } else if (isMatch(event, state.shortcuts.pasteTimestamp)) {
+      event.preventDefault();
+      if (state.currentClipTime) {
+          const storedSettings = await chrome.storage.local.get(['timestampPrefix', 'timestampSuffix']);
+          const prefix = storedSettings.timestampPrefix !== undefined ? storedSettings.timestampPrefix : ' - ';
+          const suffix = storedSettings.timestampSuffix !== undefined ? storedSettings.timestampSuffix : '  ';
+          const textToAppend = `${prefix}${state.currentClipTime}${suffix}`;
+          chrome.runtime.sendMessage({ action: "loadText", videoId: state.currentVideoId }, async (response) => {
+              const currentText = (response && response.text) ? response.text : "";
+              let newText = currentText + textToAppend;
+              newText = await replaceNgWords(newText);
+              chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: newText }, () => {
+                  switchToEditMode(newText, { scrollToBottom: true });
+              });
+          });
+      }
   }
 }
 

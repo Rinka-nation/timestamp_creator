@@ -209,3 +209,15 @@ label {
   outline: none;
   overflow-y: auto;
 }
+
+.shortcut-setting {
+  margin-bottom: 15px;
+}
+.shortcut-input {
+  width: calc(100% - 20px);
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: #f9f9f9;
+  cursor: pointer;
+}

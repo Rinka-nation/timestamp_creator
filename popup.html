@@ -15,6 +15,7 @@
     <button class="nav-button" data-target="timestamps-page"><img src="icons/trash_can.png" class="button-icon">タイムスタンプ管理</button>
     <button class="nav-button" data-target="format-settings-page"><img src="icons/setting.png" class="button-icon">タイムスタンプ形式設定</button>
     <button class="nav-button" data-target="ng-words-page"><img src="icons/NG_word.png" class="button-icon">NGワード設定</button>
+    <button class="nav-button" data-target="shortcuts-page">ショートカットキー設定</button>
     <button class="nav-button" data-target="help-page">使い方・ショートカット</button>
   </div>
 
@@ -81,6 +82,37 @@
     <ul>
       <li>シャドウバンの可能性があるタイムスタンプは、背景が赤色でハイライトされ、警告メッセージが表示されます。</li>
     </ul>
+    <button class="back-button" data-target="home-page">ホームに戻る</button>
+  </div>
+
+  <div id="shortcuts-page" class="page">
+    <h2>ショートカットキー設定</h2>
+    <p>各機能の入力ボックスを選択後、設定したいキーを押してください。</p>
+    
+    <div class="shortcut-setting">
+      <label for="shortcut-addTimestamp">タイムスタンプ追加 (編集モードでも有効)</label>
+      <input type="text" id="shortcut-addTimestamp" class="shortcut-input" readonly>
+    </div>
+    <div class="shortcut-setting">
+      <label for="shortcut-addTimestampAlt">タイムスタンプ追加 (表示モードのみ)</label>
+      <input type="text" id="shortcut-addTimestampAlt" class="shortcut-input" readonly>
+    </div>
+    <div class="shortcut-setting">
+      <label for="shortcut-toggleVisibility">表示/非表示 (デフォルト: G)</label>
+      <input type="text" id="shortcut-toggleVisibility" class="shortcut-input" readonly>
+    </div>
+    <div class="shortcut-setting">
+      <label for="shortcut-copyTimestamp">現在時間をコピー (デフォルト: U)</label>
+      <input type="text" id="shortcut-copyTimestamp" class="shortcut-input" readonly>
+    </div>
+    <div class="shortcut-setting">
+      <label for="shortcut-pasteTimestamp">コピーした時間を追加 (デフォルト: Y)</label>
+      <input type="text" id="shortcut-pasteTimestamp" class="shortcut-input" readonly>
+    </div>
+    
+    <button id="save-shortcuts">保存</button>
+    <button id="reset-shortcuts">デフォルトに戻す</button>
+    <p id="shortcut-save-status" style="color: green;"></p>
     <button class="back-button" data-target="home-page">ホームに戻る</button>
   </div>
 
