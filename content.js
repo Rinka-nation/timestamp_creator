@@ -1,5 +1,3 @@
-
-
 // --- Global State (Encapsulated) ---
 const state = {
   mainContainer: null,
@@ -304,6 +302,7 @@ function createMainContainer() {
 
 // --- Mode Switching Logic ---
 function switchToDisplayMode(text) {
+    const scrollPosition = state.editor ? state.editor.scrollTop : 0;
     state.selectedTimestampSpan = null;
     state.isEditing = false;
     const contentArea = state.mainContainer.querySelector('div:nth-of-type(2)');
@@ -346,11 +345,13 @@ function switchToDisplayMode(text) {
         }
     });
     contentArea.appendChild(state.editor);
+    state.editor.scrollTop = scrollPosition;
     updateCharCount(text);
     updateSpanStyles();
 }
 
 function switchToEditMode(currentText, options = {}) {
+    const scrollPosition = state.editor ? state.editor.scrollTop : 0;
     const { caretPosition = -1, scrollToBottom = false } = options;
     state.isEditing = true;
     const contentArea = state.mainContainer.querySelector('div:nth-of-type(2)');
@@ -392,6 +393,11 @@ function switchToEditMode(currentText, options = {}) {
         }
     });
     contentArea.appendChild(state.editor);
+    if (scrollToBottom) {
+        state.editor.scrollTop = state.editor.scrollHeight;
+    } else {
+        state.editor.scrollTop = scrollPosition;
+    }
     if (caretPosition !== -1) {
         state.editor.selectionStart = state.editor.selectionEnd = caretPosition;
     }
@@ -401,7 +407,7 @@ function switchToEditMode(currentText, options = {}) {
 }
 
 function escapeRegExp(string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return string.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
 }
 
 async function replaceNgWords(text) {
