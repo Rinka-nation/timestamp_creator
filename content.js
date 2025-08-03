@@ -280,6 +280,22 @@ function createMainContainer() {
 
   buttonBar.appendChild(addTimestampButton);
   buttonBar.appendChild(copyAllButton);
+
+  const insertStampButton = document.createElement('button');
+  insertStampButton.textContent = 'スタンプ挿入';
+  Object.assign(insertStampButton.style, buttonStyle);
+  insertStampButton.style.display = 'none'; // 初期状態では非表示
+  insertStampButton.addEventListener('mousedown', (event) => {
+    event.preventDefault(); // デフォルトの動作（フォーカス喪失）を防ぐ
+    showStampSelectionOverlay();
+    if (state.editor && state.editor.tagName === 'TEXTAREA') {
+      state.editor.focus(); // 再度フォーカスを当てる
+    }
+  });
+  insertStampButton.onmouseover = () => { insertStampButton.style.backgroundColor = '#555'; };
+  insertStampButton.onmouseout = () => { insertStampButton.style.backgroundColor = '#3e3e3e'; };
+  buttonBar.appendChild(insertStampButton);
+
   footer.appendChild(buttonBar);
 
   state.warningDisplay = document.createElement('div');
@@ -298,10 +314,174 @@ function createMainContainer() {
 
   document.body.appendChild(state.mainContainer);
   makeDraggable(state.mainContainer, header);
+
+  // スタンプ選択オーバーレイの作成
+  state.stampSelectionOverlay = document.createElement('div');
+  Object.assign(state.stampSelectionOverlay.style, {
+    position: 'absolute', top: '0', left: '0', right: '0', bottom: '0',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)', zIndex: '10002', display: 'none',
+    flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+    padding: '10px', boxSizing: 'border-box'
+  });
+  state.mainContainer.appendChild(state.stampSelectionOverlay);
+
+  const overlayHeader = document.createElement('div');
+  Object.assign(overlayHeader.style, {
+    width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    paddingBottom: '10px', borderBottom: '1px solid #505050', marginBottom: '10px'
+  });
+  state.stampSelectionOverlay.appendChild(overlayHeader);
+
+  const overlayTitle = document.createElement('h3');
+  Object.assign(overlayTitle.style, {
+    color: '#E0E0E0', margin: '0'
+  });
+  overlayTitle.textContent = 'メンバーシップスタンプを選択';
+  overlayHeader.appendChild(overlayTitle);
+
+  const closeOverlayButton = document.createElement('button');
+  Object.assign(closeOverlayButton.style, {
+    backgroundColor: '#5a3d3d', color: '#E0E0E0', border: 'none', borderRadius: '4px',
+    padding: '5px 10px', cursor: 'pointer', fontSize: '14px'
+  });
+  closeOverlayButton.textContent = '閉じる';
+  closeOverlayButton.addEventListener('click', hideStampSelectionOverlay);
+  overlayHeader.appendChild(closeOverlayButton);
+
+  state.stampListContainer = document.createElement('div');
+  Object.assign(state.stampListContainer.style, {
+    flexGrow: '1', width: '100%', overflowY: 'auto', color: '#E0E0E0'
+  });
+  state.stampSelectionOverlay.appendChild(state.stampListContainer);
+}
+
+function showStampSelectionOverlay() {
+  if (state.stampSelectionOverlay) {
+    // blurイベントリスナーを一時的に削除
+    if (state.editor && state.editorBlurListener) {
+      state.editor.removeEventListener('blur', state.editorBlurListener);
+    }
+    state.stampSelectionOverlay.style.display = 'flex';
+    // メンバーシップスタンプデータを取得してレンダリング
+    try {
+      chrome.runtime.sendMessage({ action: "getMembershipStamps" }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error("Error getting membership stamps:", chrome.runtime.lastError);
+          state.stampListContainer.innerHTML = '<p style="color: red;">スタンプの読み込みに失敗しました。</p>';
+        } else {
+          renderStampsInOverlay(response);
+        }
+      });
+    } catch (e) {
+      console.error("Error sending message to background:", e);
+      state.stampListContainer.innerHTML = '<p style="color: red;">スタンプの読み込みに失敗しました。</p>';
+    }
+  }
+}
+
+function renderStampsInOverlay(channelData) {
+  state.stampListContainer.innerHTML = '';
+  if (channelData.length === 0) {
+    state.stampListContainer.innerHTML = '<p>保存されたメンバーシップスタンプはありません。</p>';
+    return;
+  }
+
+  channelData.forEach(channel => {
+    const channelDiv = document.createElement('div');
+    Object.assign(channelDiv.style, {
+      marginBottom: '15px', border: '1px solid #505050', padding: '10px',
+      borderRadius: '5px', backgroundColor: '#333'
+    });
+
+    const channelTitle = document.createElement('h4');
+    Object.assign(channelTitle.style, {
+      marginTop: '0', marginBottom: '10px', color: '#E0E0E0'
+    });
+    channelTitle.textContent = channel.channelName;
+    channelDiv.appendChild(channelTitle);
+
+    const stampsGrid = document.createElement('div');
+    Object.assign(stampsGrid.style, {
+      display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
+      gap: '10px'
+    });
+
+    channel.stamps.forEach(stamp => {
+      const stampDiv = document.createElement('div');
+      Object.assign(stampDiv.style, {
+        textAlign: 'center', wordBreak: 'break-all', cursor: 'pointer',
+        padding: '5px', borderRadius: '3px', transition: 'background-color 0.2s'
+      });
+      stampDiv.addEventListener('mouseover', () => { stampDiv.style.backgroundColor = '#555'; });
+      stampDiv.addEventListener('mouseout', () => { stampDiv.style.backgroundColor = 'transparent'; });
+      stampDiv.addEventListener('click', () => insertStampIntoEditor(stamp.name));
+
+      const img = document.createElement('img');
+      Object.assign(img.style, {
+        width: '50px', height: '50px', objectFit: 'contain', marginBottom: '5px'
+      });
+      img.src = stamp.url;
+      img.alt = stamp.name;
+
+      const nameSpan = document.createElement('span');
+      Object.assign(nameSpan.style, {
+        fontSize: '0.8em', display: 'block', color: '#E0E0E0'
+      });
+      nameSpan.textContent = stamp.name;
+
+      stampDiv.appendChild(img);
+      stampDiv.appendChild(nameSpan);
+      stampsGrid.appendChild(stampDiv);
+    });
+    channelDiv.appendChild(stampsGrid);
+    state.stampListContainer.appendChild(channelDiv);
+  });
+}
+
+function hideStampSelectionOverlay() {
+  if (state.stampSelectionOverlay) {
+    state.stampSelectionOverlay.style.display = 'none';
+    // blurイベントリスナーを再度追加
+    if (state.editor && state.editorBlurListener) {
+      state.editor.addEventListener('blur', state.editorBlurListener);
+    }
+  }
+}
+
+function insertStampIntoEditor(stampName) {
+  console.log("insertStampIntoEditor called with:", stampName);
+  if (!state.editor || state.editor.tagName !== 'TEXTAREA') {
+    console.log("Editor is not a textarea or not available.", state.editor);
+    return;
+  }
+
+  const currentText = state.editor.value;
+  const start = state.editor.selectionStart;
+  const end = state.editor.selectionEnd;
+
+  const textToInsert = `${stampName}`; // スタンプ名を :name: 形式にする
+
+  console.log(`Inserting "${textToInsert}" at position ${start}-${end} in text: "${currentText}"`);
+
+  state.editor.value = currentText.substring(0, start) + textToInsert + currentText.substring(end);
+  state.editor.selectionStart = state.editor.selectionEnd = start + textToInsert.length;
+
+  console.log("New editor value:", state.editor.value);
+
+  // inputイベントをディスパッチして、他のリスナーをトリガーする
+  state.editor.dispatchEvent(new Event('input', { bubbles: true }));
+  console.log("Input event dispatched.");
+
+  hideStampSelectionOverlay(); // 挿入後にオーバーレイを閉じる
+  console.log("Overlay hidden.");
 }
 
 // --- Mode Switching Logic ---
 function switchToDisplayMode(text) {
+    const insertStampButton = document.querySelector('#youtube-timestamp-main-container button:nth-child(3)'); // 3番目のボタンがスタンプ挿入ボタン
+    if (insertStampButton) {
+        insertStampButton.style.display = 'none';
+    }
     const scrollPosition = state.editor ? state.editor.scrollTop : 0;
     state.selectedTimestampSpan = null;
     state.isEditing = false;
@@ -351,6 +531,10 @@ function switchToDisplayMode(text) {
 }
 
 function switchToEditMode(currentText, options = {}) {
+    const insertStampButton = document.querySelector('#youtube-timestamp-main-container button:nth-child(3)'); // 3番目のボタンがスタンプ挿入ボタン
+    if (insertStampButton) {
+        insertStampButton.style.display = 'block';
+    }
     const scrollPosition = state.editor ? state.editor.scrollTop : 0;
     const { caretPosition = -1, scrollToBottom = false } = options;
     state.isEditing = true;
@@ -383,7 +567,7 @@ function switchToEditMode(currentText, options = {}) {
         }
         updateSpanStyles();
     });
-    state.editor.addEventListener('blur', () => {
+    state.editor.addEventListener('blur', state.editorBlurListener = () => {
         switchToDisplayMode(state.editor.value);
     });
     state.editor.addEventListener('keydown', (event) => {

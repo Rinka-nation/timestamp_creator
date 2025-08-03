@@ -177,6 +177,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     })();
     return true;
   }
+
+  if (request.action === "getMembershipStamps") {
+    (async () => {
+      const data = await STORAGE.get('membershipStamps');
+      sendResponse(data.membershipStamps || []);
+    })();
+    return true;
+  }
 });
 
 chrome.storage.onChanged.addListener((changes, namespace) => {

@@ -226,8 +226,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const data = await response.json();
             return data.title || videoId;
-        } catch (_error) {
-            console.log(_error);
+        } catch (e) {
+            console.log(e);
             return videoId;
         }
     }
@@ -249,8 +249,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 return { ...item, title };
             }));
             renderList(itemsWithTitles);
-        } catch (_error) {
-            console.log(_error);
+        } catch (e) {
+            console.log(e);
             listContainer.innerHTML = '<p>Error loading data. See console.</p>';
         }
     }
