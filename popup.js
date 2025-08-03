@@ -1,12 +1,12 @@
 document.addEventListener('DOMContentLoaded', () => {
     // Page elements
-    const homePage = document.getElementById('home-page');
-    const timestampsPage = document.getElementById('timestamps-page');
-    const formatSettingsPage = document.getElementById('format-settings-page');
-    const ngWordsPage = document.getElementById('ng-words-page');
-    const helpPage = document.getElementById('help-page');
-    const shortcutsPage = document.getElementById('shortcuts-page');
-    const membershipStampsPage = document.getElementById('membership-stamps-page');
+    // const homePage = document.getElementById('home-page');
+    // const timestampsPage = document.getElementById('timestamps-page');
+    // const formatSettingsPage = document.getElementById('format-settings-page');
+    // const ngWordsPage = document.getElementById('ng-words-page');
+    // const helpPage = document.getElementById('help-page');
+    // const shortcutsPage = document.getElementById('shortcuts-page');
+    // const membershipStampsPage = document.getElementById('membership-stamps-page');
 
     // Navigation buttons
     document.querySelectorAll('.nav-button').forEach(button => {
@@ -226,8 +226,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const data = await response.json();
             return data.title || videoId;
-        } catch (error) {
-            
+        } catch (_error) {
+            console.log(_error);
             return videoId;
         }
     }
@@ -249,8 +249,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 return { ...item, title };
             }));
             renderList(itemsWithTitles);
-        } catch (error) {
-            
+        } catch (_error) {
+            console.log(_error);
             listContainer.innerHTML = '<p>Error loading data. See console.</p>';
         }
     }

@@ -132,7 +132,7 @@ function updateSpanStyles() {
 function copyToClipboard(text) {
   navigator.clipboard.writeText(text).then(() => {
     
-  }).catch(err => {
+  }).catch(() => {
     
   });
 }
@@ -313,7 +313,7 @@ function switchToDisplayMode(text) {
         flex: '1', padding: '10px', fontFamily: 'monospace', fontSize: '13px',
         color: '#E0E0E0', whiteSpace: 'pre-wrap', outline: 'none', overflowY: 'auto'
     });
-    const formattedContent = text.replace(/(\d+:\d{2}:\d{2}|\d{1,2}:\d{2}(?!:))/g, '<span style="color: #3399FF; cursor: pointer; text-decoration: underline;">$&<\/span>');
+    const formattedContent = text.replace(/(\d+:\d{2}:\d{2}|\d{1,2}:\d{2}(?!:))/g, '<span style="color: #3399FF; cursor: pointer; text-decoration: underline;">$&</span>');
     state.editor.innerHTML = formattedContent;
     state.editor.addEventListener('dblclick', (e) => {
         const currentFullText = state.editor.textContent;
@@ -340,7 +340,7 @@ function switchToDisplayMode(text) {
                     video.currentTime = parseTime(e.target.textContent);
                 }
             } else {
-                
+                // Live stream, cannot seek
             }
         }
     });
