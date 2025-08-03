@@ -67,6 +67,66 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.action === "getStorage") {
+    (async () => {
+      const data = await STORAGE.get(request.keys);
+      sendResponse(data);
+    })();
+    return true;
+  }
+
+  if (request.action === "setStorage") {
+    (async () => {
+      await STORAGE.set(request.items);
+      sendResponse({ status: "saved" });
+    })();
+    return true;
+  }
+
+  if (request.action === "getNgWords") {
+    (async () => {
+      const data = await STORAGE.get('ngWords');
+      sendResponse(data.ngWords || []);
+    })();
+    return true;
+  }
+
+  if (request.action === "getTimestampSettings") {
+    (async () => {
+      const data = await STORAGE.get(['timestampPrefix', 'timestampSuffix', 'defaultTimestampText']);
+      sendResponse({
+        timestampPrefix: data.timestampPrefix !== undefined ? data.timestampPrefix : ' - ',
+        timestampSuffix: data.timestampSuffix !== undefined ? data.timestampSuffix : '  ',
+        defaultTimestampText: data.defaultTimestampText !== undefined ? data.defaultTimestampText : "タイムスタンプ（編集中）  ※ネタバレ注意"
+      });
+    })();
+    return true;
+  }
+
+  if (request.action === "getShortcuts") {
+    (async () => {
+      const data = await STORAGE.get('shortcuts');
+      sendResponse(data.shortcuts || {});
+    })();
+    return true;
+  }
+
+  if (request.action === "getMainContainerHidden") {
+    (async () => {
+      const data = await STORAGE.get('mainContainerHidden');
+      sendResponse(data.mainContainerHidden || false);
+    })();
+    return true;
+  }
+
+  if (request.action === "setMainContainerHidden") {
+    (async () => {
+      await STORAGE.set({ mainContainerHidden: request.hidden });
+      sendResponse({ status: "saved" });
+    })();
+    return true;
+  }
+
   if (request.action === "clearText") {
     (async () => {
       const key = `video_${request.videoId}`;
@@ -95,5 +155,38 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({ status: "deleted", videoId: request.videoId });
     })();
     return true;
+  }
+
+  if (request.action === "executeScraper") {
+    (async () => {
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (tab) {
+                const results = await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    files: ['stamp_scraper.js']
+                });
+                sendResponse(results[0].result);
+            } else {
+                sendResponse([]);
+            }
+        } catch (e) {
+            console.error('Error executing scraper:', e);
+            sendResponse([]);
+        }
+    })();
+    return true;
+  }
+});
+
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === 'local' && changes.shortcuts) {
+    chrome.tabs.query({}, (tabs) => {
+      tabs.forEach(tab => {
+        if (tab.url && tab.url.startsWith("https://www.youtube.com/")) {
+          chrome.tabs.sendMessage(tab.id, { action: "shortcutsUpdated", shortcuts: changes.shortcuts.newValue });
+        }
+      });
+    });
   }
 });

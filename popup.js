@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const ngWordsPage = document.getElementById('ng-words-page');
     const helpPage = document.getElementById('help-page');
     const shortcutsPage = document.getElementById('shortcuts-page');
+    const membershipStampsPage = document.getElementById('membership-stamps-page');
 
     // Navigation buttons
     document.querySelectorAll('.nav-button').forEach(button => {
@@ -36,6 +37,8 @@ document.addEventListener('DOMContentLoaded', () => {
             loadNgWords();
         } else if (pageId === 'shortcuts-page') {
             loadShortcutSettings();
+        } else if (pageId === 'membership-stamps-page') {
+            loadAndRenderMembershipStamps();
         }
     }
 
@@ -58,6 +61,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     });
+
+    const getMembershipStampsButton = document.getElementById('get-membership-stamps-button');
+    if (getMembershipStampsButton) {
+      getMembershipStampsButton.addEventListener('click', () => {
+        showPage('membership-stamps-page');
+        loadAndRenderMembershipStamps();
+      });
+    }
 
 
     // --- Timestamps List (timestamps-page) ---
@@ -305,5 +316,90 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
         }
+    }
+
+    // --- Membership Stamps Display (membership-stamps-page) ---
+    const membershipStampsList = document.getElementById('membership-stamps-list');
+    const updateMembershipStampsButton = document.getElementById('update-membership-stamps-button');
+
+    async function loadAndRenderMembershipStamps() {
+        membershipStampsList.innerHTML = '<p>読み込み中...</p>';
+        const data = await chrome.storage.local.get('membershipStamps');
+        if (data.membershipStamps) {
+            renderMembershipStamps(data.membershipStamps);
+        } else {
+            membershipStampsList.innerHTML = '<p>保存されたメンバーシップスタンプはありません。「スタンプを更新」ボタンを押して取得してください。</p>';
+        }
+    }
+
+    updateMembershipStampsButton.addEventListener('click', () => {
+        chrome.runtime.sendMessage({ action: "executeScraper" }, (response) => {
+            if (chrome.runtime.lastError) {
+                console.error("Error executing scraper:", chrome.runtime.lastError);
+                alert("スタンプの取得に失敗しました。YouTubeのページで再度お試しください。");
+            } else {
+                console.log("Scraped data:", response);
+                if (response && response.length > 0) {
+                    chrome.storage.local.set({ membershipStamps: response }, () => {
+                        loadAndRenderMembershipStamps();
+                        alert("スタンプの取得と保存が完了しました。");
+                    });
+                } else {
+                    alert("スタンプが見つかりませんでした。YouTubeの動画ページで絵文字ピッカーを開いてから再度お試しください。");
+                }
+            }
+        });
+    });
+
+    function renderMembershipStamps(channelData) {
+        membershipStampsList.innerHTML = '';
+        if (channelData.length === 0) {
+            membershipStampsList.innerHTML = '<p>メンバーシップスタンプは見つかりませんでした。</p>';
+            return;
+        }
+
+        channelData.forEach(channel => {
+            const channelDiv = document.createElement('div');
+            channelDiv.style.marginBottom = '15px';
+            channelDiv.style.border = '1px solid #eee';
+            channelDiv.style.padding = '10px';
+            channelDiv.style.borderRadius = '5px';
+
+            const channelTitle = document.createElement('h3');
+            channelTitle.textContent = channel.channelName;
+            channelTitle.style.marginTop = '0';
+            channelTitle.style.marginBottom = '10px';
+            channelDiv.appendChild(channelTitle);
+
+            const stampsGrid = document.createElement('div');
+            stampsGrid.style.display = 'grid';
+            stampsGrid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(80px, 1fr))';
+            stampsGrid.style.gap = '10px';
+
+            channel.stamps.forEach(stamp => {
+                const stampDiv = document.createElement('div');
+                stampDiv.style.textAlign = 'center';
+                stampDiv.style.wordBreak = 'break-all';
+
+                const img = document.createElement('img');
+                img.src = stamp.url;
+                img.alt = stamp.name;
+                img.style.width = '50px';
+                img.style.height = '50px';
+                img.style.objectFit = 'contain';
+                img.style.marginBottom = '5px';
+
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = stamp.name;
+                nameSpan.style.fontSize = '0.8em';
+                nameSpan.style.display = 'block';
+
+                stampDiv.appendChild(img);
+                stampDiv.appendChild(nameSpan);
+                stampsGrid.appendChild(stampDiv);
+            });
+            channelDiv.appendChild(stampsGrid);
+            membershipStampsList.appendChild(channelDiv);
+        });
     }
 });

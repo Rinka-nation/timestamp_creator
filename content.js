@@ -53,7 +53,7 @@ function formatTime(seconds, forceHours = false) {
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
   if (h > 0 || forceHours) {
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    return `${String(h)}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   } else {
     return `${m}:${String(s).padStart(2, '0')}`;
   }
