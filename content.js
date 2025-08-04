@@ -11,6 +11,7 @@ const state = {
   shortcuts: {},
   stampPopover: null,
   stampPopoverTimer: null,
+  preDisplayModeText: "", // Add this line
 };
 
 // --- Constants ---
@@ -473,39 +474,79 @@ function insertStampIntoEditor(stampName) {
 }
 
 // --- Mode Switching Logic ---
-function switchToDisplayMode(text) {
-    const insertStampButton = document.querySelector('#youtube-timestamp-main-container button:nth-child(3)'); // 3番目のボタンがスタンプ挿入ボタン
+async function switchToDisplayMode(text) {
+    state.preDisplayModeText = text; // 元のテキストを保存
+
+    // スタンプ挿入ボタンを非表示
+    const insertStampButton = document.querySelector('#youtube-timestamp-main-container button:nth-child(3)');
     if (insertStampButton) {
         insertStampButton.style.display = 'none';
     }
+
+    // 現在のスクロール位置を保持
     const scrollPosition = state.editor ? state.editor.scrollTop : 0;
+
+    // 編集状態をリセット
     state.selectedTimestampSpan = null;
     state.isEditing = false;
+
+    // エディタを削除して新しく作成
     const contentArea = state.mainContainer.querySelector('div:nth-of-type(2)');
     if (state.editor) contentArea.removeChild(state.editor);
+
     state.editor = document.createElement('div');
     state.editor.id = 'youtube-timestamp-display-area';
     Object.assign(state.editor.style, {
-        flex: '1', padding: '10px', fontFamily: 'monospace', fontSize: '13px',
-        color: '#E0E0E0', whiteSpace: 'pre-wrap', outline: 'none', overflowY: 'auto'
+        flex: '1',
+        padding: '10px',
+        fontFamily: 'monospace',
+        fontSize: '13px',
+        color: '#E0E0E0',
+        whiteSpace: 'pre-wrap',
+        outline: 'none',
+        overflowY: 'auto',
+        wordBreak: 'break-word'
     });
-    const formattedContent = text.replace(/(\d+:\d{2}:\d{2}|\d{1,2}:\d{2}(?!:))/g, '<span style="color: #3399FF; cursor: pointer; text-decoration: underline;">$&</span>');
-    state.editor.innerHTML = formattedContent;
-    state.editor.addEventListener('dblclick', (e) => {
-        const currentFullText = state.editor.textContent;
-        if (document.caretRangeFromPoint) {
-            const range = document.caretRangeFromPoint(e.clientX, e.clientY);
-            if (range) {
-                const preCaretRange = document.createRange();
-                preCaretRange.selectNodeContents(state.editor);
-                preCaretRange.setEnd(range.startContainer, range.startOffset);
-                const caretOffset = preCaretRange.toString().length;
-                switchToEditMode(currentFullText, { caretPosition: caretOffset });
-                return;
-            }
+
+    // タイムスタンプのリンク化
+    let formattedContent = text.replace(/(\d+:\d{2}:\d{2}|\d{1,2}:\d{2}(?!:))/g,
+        '<span style="color: #3399FF; cursor: pointer; text-decoration: underline;">$&</span>');
+
+    // スタンプデータの取得
+    const stampData = await new Promise(resolve => {
+        chrome.runtime.sendMessage({ action: "getMembershipStamps" }, resolve);
+    });
+
+    if (stampData && stampData.length > 0) {
+        const stampMap = new Map();
+        stampData.forEach(channel => {
+            channel.stamps.forEach(stamp => {
+                stampMap.set(stamp.name, stamp.url);
+            });
+        });
+
+        if (stampMap.size > 0) {
+            const stampNames = Array.from(stampMap.keys()).map(name =>
+                name.replace(/[.*+?^${}()|[\\]/g, '\\$&')  // 正規表現エスケープ
+            );
+            const regex = new RegExp(`(${stampNames.join('|')})`, 'g');
+            formattedContent = formattedContent.replace(regex, (match, stampName) => {
+                const imgUrl = stampMap.get(stampName);
+                return `<img src="${imgUrl}" alt=":${stampName}:" title=":${stampName}:" style="width: 24px; height: 24px; vertical-align: middle; margin: 0 1px;"/>`;
+            });
         }
-        switchToEditMode(currentFullText);
+    }
+
+    // HTMLを挿入
+    state.editor.innerHTML = formattedContent;
+
+    // ダブルクリックで編集モードへ
+    state.editor.addEventListener('dblclick', (e) => {
+        const textToEdit = state.preDisplayModeText;
+        switchToEditMode(textToEdit);
     });
+
+    // タイムスタンプクリックでジャンプ
     state.editor.addEventListener('click', (e) => {
         if (e.target.tagName === 'SPAN') {
             state.selectedTimestampSpan = e.target;
@@ -515,16 +556,16 @@ function switchToDisplayMode(text) {
                 if (video) {
                     video.currentTime = parseTime(e.target.textContent);
                 }
-            } else {
-                // Live stream, cannot seek
             }
         }
     });
+
     contentArea.appendChild(state.editor);
     state.editor.scrollTop = scrollPosition;
     updateCharCount(text);
     updateSpanStyles();
 }
+
 
 function switchToEditMode(currentText, options = {}) {
     const insertStampButton = document.querySelector('#youtube-timestamp-main-container button:nth-child(3)'); // 3番目のボタンがスタンプ挿入ボタン
@@ -587,7 +628,7 @@ function switchToEditMode(currentText, options = {}) {
 }
 
 function escapeRegExp(string) {
-  return string.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function replaceNgWords(text) {
