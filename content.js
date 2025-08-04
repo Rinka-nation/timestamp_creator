@@ -285,7 +285,7 @@ function createMainContainer() {
   insertStampButton.textContent = 'スタンプ挿入';
   Object.assign(insertStampButton.style, buttonStyle);
   insertStampButton.style.display = 'none'; // 初期状態では非表示
-  insertStampButton.addEventListener('mousedown', (event) => {
+  insertStampButton.addEventListener('mouseover', (event) => {
     event.preventDefault(); // デフォルトの動作（フォーカス喪失）を防ぐ
     showStampSelectionOverlay();
     if (state.editor && state.editor.tagName === 'TEXTAREA') {
