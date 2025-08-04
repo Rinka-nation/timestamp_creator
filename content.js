@@ -9,6 +9,8 @@ const state = {
   isEditing: false,
   selectedTimestampSpan: null,
   shortcuts: {},
+  stampPopover: null,
+  stampPopoverTimer: null,
 };
 
 // --- Constants ---
@@ -285,15 +287,20 @@ function createMainContainer() {
   insertStampButton.textContent = 'スタンプ挿入';
   Object.assign(insertStampButton.style, buttonStyle);
   insertStampButton.style.display = 'none'; // 初期状態では非表示
-  insertStampButton.addEventListener('mouseover', (event) => {
-    event.preventDefault(); // デフォルトの動作（フォーカス喪失）を防ぐ
-    showStampSelectionOverlay();
-    if (state.editor && state.editor.tagName === 'TEXTAREA') {
-      state.editor.focus(); // 再度フォーカスを当てる
+
+  insertStampButton.addEventListener('mouseover', () => {
+    if (state.stampPopoverTimer) {
+        clearTimeout(state.stampPopoverTimer);
     }
+    showStampPopover();
   });
-  insertStampButton.onmouseover = () => { insertStampButton.style.backgroundColor = '#555'; };
-  insertStampButton.onmouseout = () => { insertStampButton.style.backgroundColor = '#3e3e3e'; };
+
+  insertStampButton.addEventListener('mouseout', () => {
+    state.stampPopoverTimer = setTimeout(() => {
+        hideStampPopover();
+    }, 100);
+  });
+
   buttonBar.appendChild(insertStampButton);
 
   footer.appendChild(buttonBar);
@@ -315,73 +322,73 @@ function createMainContainer() {
   document.body.appendChild(state.mainContainer);
   makeDraggable(state.mainContainer, header);
 
-  // スタンプ選択オーバーレイの作成
-  state.stampSelectionOverlay = document.createElement('div');
-  Object.assign(state.stampSelectionOverlay.style, {
-    position: 'absolute', top: '0', left: '0', right: '0', bottom: '0',
-    backgroundColor: 'rgba(0, 0, 0, 0.8)', zIndex: '10002', display: 'none',
-    flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-    padding: '10px', boxSizing: 'border-box'
+  // スタンプ選択ポップアップの作成
+  state.stampPopover = document.createElement('div');
+  Object.assign(state.stampPopover.style, {
+    position: 'absolute',
+    bottom: '45px',
+    right: '10px', // 右端からの距離を調整して見切れを防止
+    width: '300px',
+    height: '250px',
+    backgroundColor: 'rgba(40, 40, 40, 0.98)',
+    border: '1px solid #606060',
+    borderRadius: '6px',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+    zIndex: '10003',
+    display: 'none',
+    flexDirection: 'column',
+    padding: '10px',
+    boxSizing: 'border-box'
   });
-  state.mainContainer.appendChild(state.stampSelectionOverlay);
+  state.mainContainer.appendChild(state.stampPopover);
 
-  const overlayHeader = document.createElement('div');
-  Object.assign(overlayHeader.style, {
-    width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    paddingBottom: '10px', borderBottom: '1px solid #505050', marginBottom: '10px'
+  // ポップアップ内クリックでテキストエリアのフォーカスが外れるのを防ぐ
+  state.stampPopover.addEventListener('mousedown', (event) => {
+    event.preventDefault();
   });
-  state.stampSelectionOverlay.appendChild(overlayHeader);
 
-  const overlayTitle = document.createElement('h3');
-  Object.assign(overlayTitle.style, {
-    color: '#E0E0E0', margin: '0'
+  state.stampPopover.addEventListener('mouseover', () => {
+    if (state.stampPopoverTimer) {
+        clearTimeout(state.stampPopoverTimer);
+    }
   });
-  overlayTitle.textContent = 'メンバーシップスタンプを選択';
-  overlayHeader.appendChild(overlayTitle);
 
-  const closeOverlayButton = document.createElement('button');
-  Object.assign(closeOverlayButton.style, {
-    backgroundColor: '#5a3d3d', color: '#E0E0E0', border: 'none', borderRadius: '4px',
-    padding: '5px 10px', cursor: 'pointer', fontSize: '14px'
+  state.stampPopover.addEventListener('mouseout', () => {
+    state.stampPopoverTimer = setTimeout(() => {
+        hideStampPopover();
+    }, 100);
   });
-  closeOverlayButton.textContent = '閉じる';
-  closeOverlayButton.addEventListener('click', hideStampSelectionOverlay);
-  overlayHeader.appendChild(closeOverlayButton);
+
 
   state.stampListContainer = document.createElement('div');
   Object.assign(state.stampListContainer.style, {
     flexGrow: '1', width: '100%', overflowY: 'auto', color: '#E0E0E0'
   });
-  state.stampSelectionOverlay.appendChild(state.stampListContainer);
+  state.stampPopover.appendChild(state.stampListContainer);
 }
 
-function showStampSelectionOverlay() {
-  if (state.stampSelectionOverlay) {
-    // blurイベントリスナーを一時的に削除
-    if (state.editor && state.editorBlurListener) {
-      state.editor.removeEventListener('blur', state.editorBlurListener);
+function showStampPopover() {
+    if (state.stampPopover.style.display === 'none') {
+        state.stampPopover.style.display = 'flex';
+        // スタンプデータを読み込んで描画
+        chrome.runtime.sendMessage({ action: "getMembershipStamps" }, (response) => {
+            if (chrome.runtime.lastError) {
+              console.error("Error getting membership stamps:", chrome.runtime.lastError);
+              state.stampListContainer.innerHTML = '<p style="color: red;">スタンプの読み込みに失敗しました。</p>';
+            } else {
+              renderStampsInPopover(response);
+            }
+        });
     }
-    state.stampSelectionOverlay.style.display = 'flex';
-    // メンバーシップスタンプデータを取得してレンダリング
-    try {
-      chrome.runtime.sendMessage({ action: "getMembershipStamps" }, (response) => {
-        if (chrome.runtime.lastError) {
-          console.error("Error getting membership stamps:", chrome.runtime.lastError);
-          state.stampListContainer.innerHTML = '<p style="color: red;">スタンプの読み込みに失敗しました。</p>';
-        } else {
-          renderStampsInOverlay(response);
-        }
-      });
-    } catch (e) {
-      console.error("Error sending message to background:", e);
-      state.stampListContainer.innerHTML = '<p style="color: red;">スタンプの読み込みに失敗しました。</p>';
-    }
-  }
 }
 
-function renderStampsInOverlay(channelData) {
+function hideStampPopover() {
+    state.stampPopover.style.display = 'none';
+}
+
+function renderStampsInPopover(channelData) {
   state.stampListContainer.innerHTML = '';
-  if (channelData.length === 0) {
+  if (!channelData || channelData.length === 0) {
     state.stampListContainer.innerHTML = '<p>保存されたメンバーシップスタンプはありません。</p>';
     return;
   }
@@ -389,21 +396,20 @@ function renderStampsInOverlay(channelData) {
   channelData.forEach(channel => {
     const channelDiv = document.createElement('div');
     Object.assign(channelDiv.style, {
-      marginBottom: '15px', border: '1px solid #505050', padding: '10px',
-      borderRadius: '5px', backgroundColor: '#333'
+      marginBottom: '10px'
     });
 
     const channelTitle = document.createElement('h4');
     Object.assign(channelTitle.style, {
-      marginTop: '0', marginBottom: '10px', color: '#E0E0E0'
+      marginTop: '0', marginBottom: '5px', color: '#E0E0E0', fontSize: '14px'
     });
     channelTitle.textContent = channel.channelName;
     channelDiv.appendChild(channelTitle);
 
     const stampsGrid = document.createElement('div');
     Object.assign(stampsGrid.style, {
-      display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
-      gap: '10px'
+      display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(60px, 1fr))',
+      gap: '5px'
     });
 
     channel.stamps.forEach(stamp => {
@@ -418,14 +424,14 @@ function renderStampsInOverlay(channelData) {
 
       const img = document.createElement('img');
       Object.assign(img.style, {
-        width: '50px', height: '50px', objectFit: 'contain', marginBottom: '5px'
+        width: '32px', height: '32px', objectFit: 'contain', marginBottom: '2px'
       });
       img.src = stamp.url;
       img.alt = stamp.name;
 
       const nameSpan = document.createElement('span');
       Object.assign(nameSpan.style, {
-        fontSize: '0.8em', display: 'block', color: '#E0E0E0'
+        fontSize: '0.7em', display: 'block', color: '#E0E0E0'
       });
       nameSpan.textContent = stamp.name;
 
@@ -436,16 +442,6 @@ function renderStampsInOverlay(channelData) {
     channelDiv.appendChild(stampsGrid);
     state.stampListContainer.appendChild(channelDiv);
   });
-}
-
-function hideStampSelectionOverlay() {
-  if (state.stampSelectionOverlay) {
-    state.stampSelectionOverlay.style.display = 'none';
-    // blurイベントリスナーを再度追加
-    if (state.editor && state.editorBlurListener) {
-      state.editor.addEventListener('blur', state.editorBlurListener);
-    }
-  }
 }
 
 function insertStampIntoEditor(stampName) {
@@ -472,8 +468,8 @@ function insertStampIntoEditor(stampName) {
   state.editor.dispatchEvent(new Event('input', { bubbles: true }));
   console.log("Input event dispatched.");
 
-  hideStampSelectionOverlay(); // 挿入後にオーバーレイを閉じる
-  console.log("Overlay hidden.");
+  hideStampPopover(); // 挿入後にポップアップを閉じる
+  console.log("Popover hidden.");
 }
 
 // --- Mode Switching Logic ---
