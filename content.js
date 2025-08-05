@@ -9,14 +9,17 @@ const state = {
   isEditing: false,
   selectedTimestampSpan: null,
   shortcuts: {},
+  preDisplayModeText: "",
+  selectedStampImage: null,
+  savedSelectionStart: -1,
+  savedSelectionEnd: -1,
+  currentRawText: "", // Add currentRawText
 };
 
 // --- Constants ---
 const HIGHLIGHT_YELLOW = 'rgba(255, 255, 0, 0.3)';
 const HIGHLIGHT_RED = 'rgba(255, 99, 71, 0.4)';
 const HIGHLIGHT_NONE = 'transparent';
-
-
 
 // --- Initialization Observer ---
 const observer = new MutationObserver((mutations, obs) => {
@@ -318,10 +321,11 @@ function createMainContainer() {
   // スタンプ選択オーバーレイの作成
   state.stampSelectionOverlay = document.createElement('div');
   Object.assign(state.stampSelectionOverlay.style, {
-    position: 'absolute', top: '0', left: '0', right: '0', bottom: '0',
-    backgroundColor: 'rgba(0, 0, 0, 0.8)', zIndex: '10002', display: 'none',
+    position: 'absolute', bottom: '45px', right: '10px', width: '280px', height: '200px',
+    backgroundColor: 'rgba(0, 0, 0, 0.95)', zIndex: '10002', display: 'none',
     flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-    padding: '10px', boxSizing: 'border-box'
+    padding: '10px', boxSizing: 'border-box',
+    border: '1px solid #888', boxShadow: '0 2px 10px rgba(0,0,0,0.5)'
   });
   state.mainContainer.appendChild(state.stampSelectionOverlay);
 
@@ -353,6 +357,7 @@ function createMainContainer() {
     flexGrow: '1', width: '100%', overflowY: 'auto', color: '#E0E0E0'
   });
   state.stampSelectionOverlay.appendChild(state.stampListContainer);
+  state.stampSelectionOverlay.addEventListener('mouseleave', hideStampSelectionOverlay);
 }
 
 function showStampSelectionOverlay() {
@@ -360,6 +365,11 @@ function showStampSelectionOverlay() {
     // blurイベントリスナーを一時的に削除
     if (state.editor && state.editorBlurListener) {
       state.editor.removeEventListener('blur', state.editorBlurListener);
+    }
+    // 現在のカーソル位置を保存
+    if (state.editor && state.editor.tagName === 'TEXTAREA') {
+      state.savedSelectionStart = state.editor.selectionStart;
+      state.savedSelectionEnd = state.editor.selectionEnd;
     }
     state.stampSelectionOverlay.style.display = 'flex';
     // メンバーシップスタンプデータを取得してレンダリング
@@ -402,8 +412,8 @@ function renderStampsInOverlay(channelData) {
 
     const stampsGrid = document.createElement('div');
     Object.assign(stampsGrid.style, {
-      display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))',
-      gap: '10px'
+      display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(60px, 1fr))',
+      gap: '5px'
     });
 
     channel.stamps.forEach(stamp => {
@@ -418,14 +428,14 @@ function renderStampsInOverlay(channelData) {
 
       const img = document.createElement('img');
       Object.assign(img.style, {
-        width: '50px', height: '50px', objectFit: 'contain', marginBottom: '5px'
+        width: '30px', height: '30px', objectFit: 'contain', marginBottom: '5px'
       });
       img.src = stamp.url;
       img.alt = stamp.name;
 
       const nameSpan = document.createElement('span');
       Object.assign(nameSpan.style, {
-        fontSize: '0.8em', display: 'block', color: '#E0E0E0'
+        fontSize: '0.7em', display: 'block', color: '#E0E0E0'
       });
       nameSpan.textContent = stamp.name;
 
@@ -444,6 +454,14 @@ function hideStampSelectionOverlay() {
     // blurイベントリスナーを再度追加
     if (state.editor && state.editorBlurListener) {
       state.editor.addEventListener('blur', state.editorBlurListener);
+    }
+    // 保存されたカーソル位置を復元
+    if (state.editor && state.editor.tagName === 'TEXTAREA' && state.savedSelectionStart !== -1) {
+      state.editor.focus();
+      state.editor.selectionStart = state.savedSelectionStart;
+      state.editor.selectionEnd = state.savedSelectionEnd;
+      state.savedSelectionStart = -1; // リセット
+      state.savedSelectionEnd = -1;   // リセット
     }
   }
 }
@@ -472,44 +490,111 @@ function insertStampIntoEditor(stampName) {
   state.editor.dispatchEvent(new Event('input', { bubbles: true }));
   console.log("Input event dispatched.");
 
+  // カーソル位置を保存
+  state.savedSelectionStart = state.editor.selectionStart;
+  state.savedSelectionEnd = state.editor.selectionEnd;
+
   hideStampSelectionOverlay(); // 挿入後にオーバーレイを閉じる
   console.log("Overlay hidden.");
 }
 
 // --- Mode Switching Logic ---
-function switchToDisplayMode(text) {
-    const insertStampButton = document.querySelector('#youtube-timestamp-main-container button:nth-child(3)'); // 3番目のボタンがスタンプ挿入ボタン
+
+
+async function switchToDisplayMode(text) {
+    // スタンプ挿入ボタンを非表示
+    const insertStampButton = document.querySelector('#youtube-timestamp-main-container button:nth-child(3)');
     if (insertStampButton) {
         insertStampButton.style.display = 'none';
     }
+
+    // スクロール位置を保存
     const scrollPosition = state.editor ? state.editor.scrollTop : 0;
+
+    // 状態リセット
     state.selectedTimestampSpan = null;
     state.isEditing = false;
+
+    // エディタ領域を再生成
     const contentArea = state.mainContainer.querySelector('div:nth-of-type(2)');
     if (state.editor) contentArea.removeChild(state.editor);
+
     state.editor = document.createElement('div');
     state.editor.id = 'youtube-timestamp-display-area';
     Object.assign(state.editor.style, {
-        flex: '1', padding: '10px', fontFamily: 'monospace', fontSize: '13px',
-        color: '#E0E0E0', whiteSpace: 'pre-wrap', outline: 'none', overflowY: 'auto'
+        flex: '1',
+        padding: '10px',
+        fontFamily: 'monospace',
+        fontSize: '13px',
+        color: '#E0E0E0',
+        whiteSpace: 'pre-wrap',
+        outline: 'none',
+        overflowY: 'auto',
+        wordBreak: 'break-word'
     });
-    const formattedContent = text.replace(/(\d+:\d{2}:\d{2}|\d{1,2}:\d{2}(?!:))/g, '<span style="color: #3399FF; cursor: pointer; text-decoration: underline;">$&</span>');
-    state.editor.innerHTML = formattedContent;
-    state.editor.addEventListener('dblclick', (e) => {
-        const currentFullText = state.editor.textContent;
-        if (document.caretRangeFromPoint) {
-            const range = document.caretRangeFromPoint(e.clientX, e.clientY);
-            if (range) {
-                const preCaretRange = document.createRange();
-                preCaretRange.selectNodeContents(state.editor);
-                preCaretRange.setEnd(range.startContainer, range.startOffset);
-                const caretOffset = preCaretRange.toString().length;
-                switchToEditMode(currentFullText, { caretPosition: caretOffset });
-                return;
-            }
+
+    // タイムスタンプのリンク化
+    let formattedContent = text.replace(
+        /(\d+:\d{2}:\d{2}|\d{1,2}:\d{2}(?!:))/g,
+        '<span style="color: #3399FF; cursor: pointer; text-decoration: underline;">$&</span>'
+    );
+
+    // スタンプデータの取得
+    const stampData = await new Promise(resolve => {
+        chrome.runtime.sendMessage({ action: "getMembershipStamps" }, resolve);
+    });
+
+    if (stampData && stampData.length > 0) {
+        const stampMap = new Map();
+        stampData.forEach(channel => {
+            channel.stamps.forEach(stamp => {
+                stampMap.set(stamp.name, stamp.url);
+            });
+        });
+
+        if (stampMap.size > 0) {
+            const stampNames = Array.from(stampMap.keys()).map(name =>
+                name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            );
+            const regex = new RegExp(`(${stampNames.join('|')})`, 'g');
+            formattedContent = formattedContent.replace(regex, (match, stampName) => {
+                const imgUrl = stampMap.get(stampName);
+                return `<img src="${imgUrl}" alt="${stampName}" title="${stampName}" style="width: 20px; height: 20px; vertical-align: middle; margin: 0 1px;"/>`;
+            });
         }
-        switchToEditMode(currentFullText);
-    });
+    }
+
+    // HTMLを挿入
+    state.editor.innerHTML = formattedContent;
+
+    // ダブルクリックで編集モードへ
+    state.editor.addEventListener('dblclick', (e) => {
+    const currentFullText = state.editor.textContent;
+    let caretOffset = 0;
+
+    if (document.caretPositionFromPoint) {
+        const pos = document.caretPositionFromPoint(e.clientX, e.clientY);
+        if (pos) {
+            const range = document.createRange();
+            range.setStart(state.editor, 0);
+            range.setEnd(pos.offsetNode, pos.offset);
+            caretOffset = range.toString().length;
+        }
+    } else {
+        // Fallback for browsers that do not support caretPositionFromPoint
+        const range = document.caretRangeFromPoint?.(e.clientX, e.clientY);
+        if (range) {
+            const preCaretRange = document.createRange();
+            preCaretRange.selectNodeContents(state.editor);
+            preCaretRange.setEnd(range.startContainer, range.startOffset);
+            caretOffset = preCaretRange.toString().length;
+        }
+    }
+
+    switchToEditMode({ caretPosition: caretOffset });
+});
+
+    // タイムスタンプクリックでジャンプ
     state.editor.addEventListener('click', (e) => {
         if (e.target.tagName === 'SPAN') {
             state.selectedTimestampSpan = e.target;
@@ -519,18 +604,17 @@ function switchToDisplayMode(text) {
                 if (video) {
                     video.currentTime = parseTime(e.target.textContent);
                 }
-            } else {
-                // Live stream, cannot seek
             }
         }
     });
+
     contentArea.appendChild(state.editor);
     state.editor.scrollTop = scrollPosition;
     updateCharCount(text);
     updateSpanStyles();
 }
 
-function switchToEditMode(currentText, options = {}) {
+function switchToEditMode(options = {}) {
     const insertStampButton = document.querySelector('#youtube-timestamp-main-container button:nth-child(3)'); // 3番目のボタンがスタンプ挿入ボタン
     if (insertStampButton) {
         insertStampButton.style.display = 'block';
@@ -547,7 +631,7 @@ function switchToEditMode(currentText, options = {}) {
         padding: '10px', fontFamily: 'monospace', fontSize: '13px', resize: 'none', outline: 'none'
     });
     state.editor.setAttribute("spellcheck", "false");
-    state.editor.value = currentText;
+    state.editor.value = state.currentRawText;
     let isComposing = false;
     state.editor.addEventListener('compositionstart', () => { isComposing = true; });
     state.editor.addEventListener('compositionend', (event) => {
@@ -556,19 +640,20 @@ function switchToEditMode(currentText, options = {}) {
     });
     state.editor.addEventListener('input', async () => {
         if (isComposing) return;
-        const newText = state.editor.value;
-        const replacedText = await replaceNgWords(newText);
-        chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: replacedText });
-        updateCharCount(replacedText);
-        if (newText !== replacedText) {
+        state.currentRawText = state.editor.value; // Update currentRawText directly
+        const replacedText = await replaceNgWords(state.currentRawText);
+        if (state.currentRawText !== replacedText) {
             const cursorPos = state.editor.selectionStart;
             state.editor.value = replacedText;
             state.editor.selectionStart = state.editor.selectionEnd = cursorPos;
+            state.currentRawText = replacedText; // Update currentRawText after NG word replacement
         }
+        chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: state.currentRawText });
+        updateCharCount(state.currentRawText);
         updateSpanStyles();
     });
     state.editor.addEventListener('blur', state.editorBlurListener = () => {
-        switchToDisplayMode(state.editor.value);
+        switchToDisplayMode(state.currentRawText);
     });
     state.editor.addEventListener('keydown', (event) => {
         if (event.shiftKey && event.key === "Enter") {
@@ -586,7 +671,7 @@ function switchToEditMode(currentText, options = {}) {
         state.editor.selectionStart = state.editor.selectionEnd = caretPosition;
     }
     state.editor.focus();
-    updateCharCount(currentText);
+    updateCharCount(state.currentRawText);
     updateSpanStyles();
 }
 
@@ -613,14 +698,14 @@ async function replaceNgWords(text) {
 function loadAndDisplayText() {
   if (!state.currentVideoId) return;
   chrome.runtime.sendMessage({ action: "loadText", videoId: state.currentVideoId }, (response) => {
-    const text = (response && response.text) ? response.text : "";
+    state.currentRawText = (response && response.text) ? response.text : "";
     if (!state.isEditing) {
-        switchToDisplayMode(text);
+        switchToDisplayMode(state.currentRawText);
     } else {
-        state.editor.value = text;
+        state.editor.value = state.currentRawText;
     }
     if (!response || !response.text) {
-        chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: text });
+        chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: state.currentRawText });
     }
   });
 }
@@ -636,36 +721,33 @@ async function addTimestamp(options = {}) {
     const video = document.querySelector('video');
     if (!video) return;
 
-    const storedSettings = await chrome.storage.local.get(['timestampPrefix', 'timestampSuffix']);
+    const storedSettings = await chrome.storage.local.get(['timestampPrefix', 'timestampSuffix', 'defaultTimestampText']);
     const prefix = storedSettings.timestampPrefix !== undefined ? storedSettings.timestampPrefix : ' - ';
     const suffix = storedSettings.timestampSuffix !== undefined ? storedSettings.timestampSuffix : '  ';
+    const defaultTimestampText = storedSettings.defaultTimestampText !== undefined ? storedSettings.defaultTimestampText : "タイムスタンプ（編集中）  ※ネタバレ注意";
 
     const timestampText = `${prefix}${formatTime(video.currentTime)}${suffix}`;
 
+    let textToSave = state.currentRawText;
+    if (textToSave.trim() === "") {
+        textToSave = defaultTimestampText + "\n\n";
+    }
+    textToSave += timestampText;
+    textToSave = await replaceNgWords(textToSave);
+
+    state.currentRawText = textToSave; // Update currentRawText
+
     if (stayInEditMode && state.editor.tagName === 'TEXTAREA') {
-        const currentText = state.editor.value;
-        let newText = currentText + timestampText;
-        newText = await replaceNgWords(newText);
-        state.editor.value = newText;
+        state.editor.value = state.currentRawText;
         state.editor.scrollTop = state.editor.scrollHeight;
         state.editor.focus();
-        state.editor.selectionStart = state.editor.selectionEnd = newText.length;
-        updateCharCount(newText);
-        chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: newText });
+        state.editor.selectionStart = state.editor.selectionEnd = state.currentRawText.length;
+        updateCharCount(state.currentRawText);
+        chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: state.currentRawText });
         updateSpanStyles();
     } else {
-        chrome.runtime.sendMessage({ action: "loadText", videoId: state.currentVideoId }, async (response) => {
-            const currentText = (response && response.text) ? response.text : "";
-            let textToSave = currentText;
-            if (textToSave.trim() === "") {
-                const storedSettings = await chrome.storage.local.get(['defaultTimestampText']);
-                textToSave = storedSettings.defaultTimestampText !== undefined ? storedSettings.defaultTimestampText + "\n\n" : "タイムスタンプ（編集中）  ※ネタバレ注意\n\n";
-            }
-            textToSave += timestampText;
-            textToSave = await replaceNgWords(textToSave);
-            chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: textToSave }, () => {
-                switchToEditMode(textToSave, { scrollToBottom: true });
-            });
+        chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: state.currentRawText }, () => {
+            switchToEditMode({ scrollToBottom: true });
         });
     }
 }
@@ -673,19 +755,25 @@ async function addTimestamp(options = {}) {
 // --- Event Handlers ---
 function adjustSelectedTimestamp(delta) {
     if (!state.selectedTimestampSpan) return;
-    let seconds = parseTime(state.selectedTimestampSpan.textContent);
+    const oldFormattedTime = state.selectedTimestampSpan.textContent;
+    let seconds = parseTime(oldFormattedTime);
     seconds += delta;
     if (seconds < 0) seconds = 0;
-    const newTime = formatTime(seconds);
-    state.selectedTimestampSpan.textContent = newTime;
-    const fullText = state.editor.textContent;
+    const newFormattedTime = formatTime(seconds);
+
+    // Directly update the text content of the selected span
+    state.selectedTimestampSpan.textContent = newFormattedTime;
+
+    // Reconstruct state.currentRawText from the updated display editor
+    state.currentRawText = getRawTextFromDisplayEditor();
+
     chrome.runtime.sendMessage({
         action: "saveText",
         videoId: state.currentVideoId,
-        text: fullText
+        text: state.currentRawText
     });
-    updateCharCount(fullText);
-    updateSpanStyles();
+    updateCharCount(state.currentRawText);
+    updateSpanStyles(); // Re-apply styles to maintain selection highlight
 }
 
 async function handleGeneralShortcuts(event) {
@@ -744,19 +832,18 @@ async function handleGeneralShortcuts(event) {
           const prefix = storedSettings.timestampPrefix !== undefined ? storedSettings.timestampPrefix : ' - ';
           const suffix = storedSettings.timestampSuffix !== undefined ? storedSettings.timestampSuffix : '  ';
           const textToAppend = `${prefix}${state.currentClipTime}${suffix}`;
-          chrome.runtime.sendMessage({ action: "loadText", videoId: state.currentVideoId }, async (response) => {
-              const currentText = (response && response.text) ? response.text : "";
-              let newText = currentText + textToAppend;
-              newText = await replaceNgWords(newText);
-              chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: newText }, () => {
-                  switchToEditMode(newText, { scrollToBottom: true });
-              });
+          
+          let newText = state.currentRawText + textToAppend;
+          newText = await replaceNgWords(newText);
+          state.currentRawText = newText; // Update currentRawText
+
+          chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: state.currentRawText }, () => {
+              switchToEditMode({ scrollToBottom: true });
           });
       }
   }
 }
 
-// --- Utility Functions ---
 function makeDraggable(element, dragHandle) {
     let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
     dragHandle.onmousedown = dragMouseDown;
@@ -782,18 +869,41 @@ function makeDraggable(element, dragHandle) {
     }
 }
 
+
+
+function getRawTextFromDisplayEditor() {
+    if (!state.editor || state.editor.tagName !== 'DIV') return "";
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = state.editor.innerHTML;
+
+    // Replace <img> tags with their alt text
+    tempDiv.querySelectorAll('img[alt]').forEach(img => {
+        if (img.alt) {
+            img.parentNode.replaceChild(document.createTextNode(img.alt), img);
+        }
+    });
+
+    // Remove <span> tags, keeping their content
+    tempDiv.querySelectorAll('span').forEach(span => {
+        span.parentNode.replaceChild(document.createTextNode(span.textContent), span);
+    });
+
+    return tempDiv.textContent;
+}
+
 // Listen for messages from the background script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "clearTextInContent") {
-    const newText = "";
-    chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: newText }, () => {
+    state.currentRawText = ""; // Clear currentRawText
+    chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: state.currentRawText }, () => {
         if (state.isEditing) {
-            state.editor.value = newText;
+            state.editor.value = state.currentRawText;
         }
         else {
-            switchToDisplayMode(newText);
+            switchToDisplayMode(state.currentRawText);
         }
-        updateCharCount(newText);
+        updateCharCount(state.currentRawText);
     });
   }
   if (request.action === "reloadExtension") {
