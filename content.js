@@ -141,7 +141,7 @@ function copyToClipboard(text) {
 }
 
 function copyAllTextToClipboard(buttonElement) {
-    const textToCopy = state.isEditing ? state.editor.value : state.editor.textContent;
+    const textToCopy = state.isEditing ? state.editor.value : getRawTextFromDisplayEditor();
     copyToClipboard(textToCopy);
 
     // Provide user feedback
@@ -594,7 +594,7 @@ async function switchToDisplayMode(text) {
     switchToEditMode({ caretPosition: caretOffset });
 });
 
-    // タイムスタンプクリックでジャンプ
+    // タイムスタンプクリックでジャンプする
     state.editor.addEventListener('click', (e) => {
         if (e.target.tagName === 'SPAN') {
             state.selectedTimestampSpan = e.target;
