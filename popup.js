@@ -49,13 +49,27 @@ document.addEventListener('DOMContentLoaded', () => {
     reloadButton.addEventListener('click', () => {
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         if (tabs[0] && tabs[0].id) {
-          chrome.tabs.sendMessage(tabs[0].id, { action: "reloadExtension" }, (response) => {
-            if (chrome.runtime.lastError) {
-              // content.jsが読み込まれていないページで押された場合のエラーハンドリング
-              console.log('Could not establish connection. Reloading the page might be necessary.');
-              // 必要であればユーザーにフィードバックを表示
+          // First, check if the UI exists
+          chrome.tabs.sendMessage(tabs[0].id, { action: "checkUIExists" }, (response) => {
+            if (chrome.runtime.lastError || !response) {
+              // Content script isn't running or didn't respond, so we need to reload.
+              console.log('Content script not running. Reloading...');
+              // Try to execute the script and then reload the extension logic
+              chrome.scripting.executeScript({
+                target: { tabId: tabs[0].id },
+                files: ['content.js']
+              }).then(() => {
+                chrome.tabs.sendMessage(tabs[0].id, { action: "reloadExtension" });
+              }).catch(err => console.error('Failed to inject content script:', err));
             } else {
-              console.log(response.status); // "reloaded"
+              // Content script is running, decide what to do based on response
+              if (response.exists) {
+                // UI exists, so toggle visibility
+                chrome.tabs.sendMessage(tabs[0].id, { action: "toggleVisibility" });
+              } else {
+                // UI doesn't exist, so reload
+                chrome.tabs.sendMessage(tabs[0].id, { action: "reloadExtension" });
+              }
             }
           });
         }
@@ -113,10 +127,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const defaultShortcuts = {
         addTimestamp: { key: 'Enter', shiftKey: true, ctrlKey: false, altKey: false, code: 'Enter' },
-        addTimestampAlt: { key: 'p', shiftKey: false, ctrlKey: false, altKey: false, code: 'KeyP' },
-        toggleVisibility: { key: 'g', shiftKey: false, ctrlKey: false, altKey: false, code: 'KeyG' },
-        copyTimestamp: { key: 'u', shiftKey: false, ctrlKey: false, altKey: false, code: 'KeyU' },
-        pasteTimestamp: { key: 'y', shiftKey: false, ctrlKey: false, altKey: false, code: 'KeyY' },
+        addTimestampAlt: { key: 'P', shiftKey: true, ctrlKey: false, altKey: false, code: 'KeyP' },
+        toggleVisibility: { key: 'G', shiftKey: true, ctrlKey: false, altKey: false, code: 'KeyG' },
+        copyTimestamp: { key: 'U', shiftKey: true, ctrlKey: false, altKey: false, code: 'KeyU' },
+        pasteTimestamp: { key: 'Y', shiftKey: true, ctrlKey: false, altKey: false, code: 'KeyY' },
     };
 
     let currentShortcuts = {};

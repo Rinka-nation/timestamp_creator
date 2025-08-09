@@ -6,13 +6,10 @@ const state = {
   warningDisplay: null,
   currentVideoId: null,
   currentClipTime: null,
-  isEditing: false,
   selectedTimestampSpan: null,
   shortcuts: {},
-  preDisplayModeText: "",
   selectedStampImage: null,
-  savedSelectionStart: -1,
-  savedSelectionEnd: -1,
+  savedCursorPosition: null, // Add savedCursorPosition to state
   currentRawText: "", // Add currentRawText
 };
 
@@ -100,7 +97,7 @@ function isPotentiallyBanned(formattedTimeString) {
 }
 
 function updateSpanStyles() {
-    if (state.isEditing || !state.editor) return;
+    if (!state.editor) return;
 
     let hasBannedTimestamp = false;
 
@@ -140,8 +137,9 @@ function copyToClipboard(text) {
   });
 }
 
-function copyAllTextToClipboard(buttonElement) {
-    const textToCopy = state.isEditing ? state.editor.value : getRawTextFromDisplayEditor();
+async function copyAllTextToClipboard(buttonElement) {
+    await renderEditor(state.currentRawText);
+    const textToCopy = getRawTextFromDisplayEditor();
     copyToClipboard(textToCopy);
 
     // Provide user feedback
@@ -180,6 +178,8 @@ function isYouTubeLive() {
 
 // --- Main Logic ---
 async function initExtension() {
+  
+
   state.currentVideoId = getVideoIdFromUrl(window.location.href);
   if (!state.currentVideoId) {
     
@@ -189,14 +189,16 @@ async function initExtension() {
   const data = await chrome.storage.local.get('shortcuts');
   const defaultShortcuts = {
       addTimestamp: { key: 'Enter', shiftKey: true, ctrlKey: false, altKey: false, code: 'Enter' },
-      addTimestampAlt: { key: 'p', shiftKey: false, ctrlKey: false, altKey: false, code: 'KeyP' },
-      toggleVisibility: { key: 'g', shiftKey: false, ctrlKey: false, altKey: false, code: 'KeyG' },
-      copyTimestamp: { key: 'u', shiftKey: false, ctrlKey: false, altKey: false, code: 'KeyU' },
-      pasteTimestamp: { key: 'y', shiftKey: false, ctrlKey: false, altKey: false, code: 'KeyY' },
+      addTimestampAlt: { key: 'P', shiftKey: true, ctrlKey: false, altKey: false, code: 'KeyP' },
+      toggleVisibility: { key: 'G', shiftKey: true, ctrlKey: false, altKey: false, code: 'KeyG' },
+      copyTimestamp: { key: 'U', shiftKey: true, ctrlKey: false, altKey: false, code: 'KeyU' },
+      pasteTimestamp: { key: 'Y', shiftKey: true, ctrlKey: false, altKey: false, code: 'KeyY' },
   };
   state.shortcuts = { ...defaultShortcuts, ...(data.shortcuts || {}) };
 
-  document.addEventListener('keydown', handleGeneralShortcuts);
+  
+  window.addEventListener('keydown', handleGeneralShortcuts, true);
+
   createMainContainer();
   loadAndDisplayText();
   chrome.storage.local.get('mainContainerHidden', (data) => {
@@ -240,7 +242,57 @@ function createMainContainer() {
       display: 'flex', flexGrow: '1', overflow: 'auto'
   });
   state.mainContainer.appendChild(contentArea);
-  switchToDisplayMode("");
+
+  // Move editor creation here
+  state.editor = document.createElement('div');
+  state.editor.id = 'youtube-timestamp-display-area';
+  state.editor.contentEditable = 'true';
+  state.editor.setAttribute("spellcheck", "false");
+  Object.assign(state.editor.style, {
+      flex: '1',
+      padding: '10px',
+      fontFamily: 'monospace',
+      fontSize: '13px',
+      color: '#E0E0E0',
+      whiteSpace: 'pre-wrap',
+      outline: 'none',
+      overflowY: 'auto',
+      wordBreak: 'break-word'
+  });
+  contentArea.appendChild(state.editor); // Append here once
+
+  // Add event listeners to the editor once
+  state.editor.addEventListener('input', async (event) => {
+      const newRawText = getRawTextFromDisplayEditor();
+      const replacedText = await replaceNgWords(newRawText);
+
+      state.currentRawText = replacedText; // Always update with the potentially replaced text
+
+      // Always save and update char count
+      chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: state.currentRawText }, () => {
+          updateCharCount(state.currentRawText);
+      });
+  });
+
+  state.editor.addEventListener('click', (e) => {
+      if (e.target.tagName === 'SPAN') {
+          state.selectedTimestampSpan = e.target;
+          updateSpanStyles();
+          if (!isYouTubeLive()) {
+              const video = document.querySelector('video');
+              if (video) {
+                  video.currentTime = parseTime(e.target.textContent);
+              }
+          }
+      }
+  });
+
+  state.editor.addEventListener('keyup', handleEditorKeyUp, true);
+  state.editor.addEventListener('blur', () => {
+      renderEditor(state.currentRawText);
+  });
+
+  renderEditor("");
   
   const footer = document.createElement('div');
   footer.style.flexShrink = '0';
@@ -249,21 +301,22 @@ function createMainContainer() {
   const buttonBar = document.createElement('div');
   Object.assign(buttonBar.style, {
       display: 'flex',
-      justifyContent: 'space-around',
+      justifyContent: 'space-between',
       padding: '5px',
-      backgroundColor: '#282828'
+      backgroundColor: '#282828',
+      flexWrap: 'nowrap'
   });
 
   const buttonStyle = {
       flex: '1',
-      padding: '8px 5px',
-      margin: '0 5px',
+      padding: '4px 2px', // Reduced padding
+      margin: '0 1px', // Further reduced margin
       border: '1px solid #505050',
       borderRadius: '4px',
       backgroundColor: '#3e3e3e',
       color: '#E0E0E0',
       cursor: 'pointer',
-      fontSize: '12px',
+      fontSize: '10px', // Reduced font size
       outline: 'none'
   };
 
@@ -281,22 +334,18 @@ function createMainContainer() {
   copyAllButton.onmouseover = () => { if (!copyAllButton.disabled) copyAllButton.style.backgroundColor = '#555'; };
   copyAllButton.onmouseout = () => { if (!copyAllButton.disabled) copyAllButton.style.backgroundColor = '#3e3e3e'; };
 
-  buttonBar.appendChild(addTimestampButton);
-  buttonBar.appendChild(copyAllButton);
-
   const insertStampButton = document.createElement('button');
   insertStampButton.textContent = 'スタンプ挿入';
   Object.assign(insertStampButton.style, buttonStyle);
-  insertStampButton.style.display = 'none'; // 初期状態では非表示
   insertStampButton.addEventListener('mouseover', (event) => {
-    event.preventDefault(); // デフォルトの動作（フォーカス喪失）を防ぐ
+    event.preventDefault();
+    state.savedCursorPosition = saveSelection(state.editor); // Save cursor position here
     showStampSelectionOverlay();
-    if (state.editor && state.editor.tagName === 'TEXTAREA') {
-      state.editor.focus(); // 再度フォーカスを当てる
-    }
   });
   insertStampButton.onmouseover = () => { insertStampButton.style.backgroundColor = '#555'; };
   insertStampButton.onmouseout = () => { insertStampButton.style.backgroundColor = '#3e3e3e'; };
+
+  buttonBar.appendChild(copyAllButton);
   buttonBar.appendChild(insertStampButton);
 
   footer.appendChild(buttonBar);
@@ -362,15 +411,6 @@ function createMainContainer() {
 
 function showStampSelectionOverlay() {
   if (state.stampSelectionOverlay) {
-    // blurイベントリスナーを一時的に削除
-    if (state.editor && state.editorBlurListener) {
-      state.editor.removeEventListener('blur', state.editorBlurListener);
-    }
-    // 現在のカーソル位置を保存
-    if (state.editor && state.editor.tagName === 'TEXTAREA') {
-      state.savedSelectionStart = state.editor.selectionStart;
-      state.savedSelectionEnd = state.editor.selectionEnd;
-    }
     state.stampSelectionOverlay.style.display = 'flex';
     // メンバーシップスタンプデータを取得してレンダリング
     try {
@@ -451,87 +491,66 @@ function renderStampsInOverlay(channelData) {
 function hideStampSelectionOverlay() {
   if (state.stampSelectionOverlay) {
     state.stampSelectionOverlay.style.display = 'none';
-    // blurイベントリスナーを再度追加
-    if (state.editor && state.editorBlurListener) {
-      state.editor.addEventListener('blur', state.editorBlurListener);
-    }
-    // 保存されたカーソル位置を復元
-    if (state.editor && state.editor.tagName === 'TEXTAREA' && state.savedSelectionStart !== -1) {
-      state.editor.focus();
-      state.editor.selectionStart = state.savedSelectionStart;
-      state.editor.selectionEnd = state.savedSelectionEnd;
-      state.savedSelectionStart = -1; // リセット
-      state.savedSelectionEnd = -1;   // リセット
-    }
+    // Removed state.editor.focus();
   }
 }
 
-function insertStampIntoEditor(stampName) {
-  console.log("insertStampIntoEditor called with:", stampName);
-  if (!state.editor || state.editor.tagName !== 'TEXTAREA') {
-    console.log("Editor is not a textarea or not available.", state.editor);
-    return;
+async function insertStampIntoEditor(stampName) { // Make it async
+  if (!state.editor) return;
+
+  // Restore the saved cursor position before getting the current selection
+  if (state.savedCursorPosition) {
+    restoreSelection(state.editor, state.savedCursorPosition);
   }
 
-  const currentText = state.editor.value;
-  const start = state.editor.selectionStart;
-  const end = state.editor.selectionEnd;
+  const selection = window.getSelection();
+  if (!selection.rangeCount) return;
 
-  const textToInsert = `${stampName}`; // スタンプ名を :name: 形式にする
+  const range = selection.getRangeAt(0);
+  const currentSavedSelection = saveSelection(state.editor); // Save current selection for post-render restore
 
-  console.log(`Inserting "${textToInsert}" at position ${start}-${end} in text: "${currentText}"`);
+  range.deleteContents();
+  const textNode = document.createTextNode(stampName);
+  range.insertNode(textNode);
 
-  state.editor.value = currentText.substring(0, start) + textToInsert + currentText.substring(end);
-  state.editor.selectionStart = state.editor.selectionEnd = start + textToInsert.length;
+  state.currentRawText = getRawTextFromDisplayEditor();
+  await renderEditor(state.currentRawText);
 
-  console.log("New editor value:", state.editor.value);
+  // Explicitly save the updated text to storage
+  chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: state.currentRawText }, () => {
+      updateCharCount(state.currentRawText);
+  });
 
-  // inputイベントをディスパッチして、他のリスナーをトリガーする
-  state.editor.dispatchEvent(new Event('input', { bubbles: true }));
-  console.log("Input event dispatched.");
+  // Calculate the new desired cursor position (after the inserted stamp)
+  const newCursorPosition = {
+      start: currentSavedSelection.start + stampName.length,
+      end: currentSavedSelection.start + stampName.length
+  };
 
-  // カーソル位置を保存
-  state.savedSelectionStart = state.editor.selectionStart;
-  state.savedSelectionEnd = state.editor.selectionEnd;
+  restoreSelection(state.editor, newCursorPosition); // Use newCursorPosition here
+  hideStampSelectionOverlay();
 
-  hideStampSelectionOverlay(); // 挿入後にオーバーレイを閉じる
-  console.log("Overlay hidden.");
+  // Clear savedCursorPosition after use
+  state.savedCursorPosition = null;
 }
 
 // --- Mode Switching Logic ---
 
 
-async function switchToDisplayMode(text) {
+async function renderEditor(text) {
     // スタンプ挿入ボタンを非表示
     const insertStampButton = document.querySelector('#youtube-timestamp-main-container button:nth-child(3)');
     if (insertStampButton) {
         insertStampButton.style.display = 'none';
     }
 
-    // スクロール位置を保存
-    const scrollPosition = state.editor ? state.editor.scrollTop : 0;
+    
 
     // 状態リセット
     state.selectedTimestampSpan = null;
-    state.isEditing = false;
+    
 
-    // エディタ領域を再生成
-    const contentArea = state.mainContainer.querySelector('div:nth-of-type(2)');
-    if (state.editor) contentArea.removeChild(state.editor);
-
-    state.editor = document.createElement('div');
-    state.editor.id = 'youtube-timestamp-display-area';
-    Object.assign(state.editor.style, {
-        flex: '1',
-        padding: '10px',
-        fontFamily: 'monospace',
-        fontSize: '13px',
-        color: '#E0E0E0',
-        whiteSpace: 'pre-wrap',
-        outline: 'none',
-        overflowY: 'auto',
-        wordBreak: 'break-word'
-    });
+    
 
     // タイムスタンプのリンク化
     let formattedContent = text.replace(
@@ -565,115 +584,24 @@ async function switchToDisplayMode(text) {
     }
 
     // HTMLを挿入
+    // コンテンツエディタでの確実なレンダリングのために、改行を<br>タグに変換
+    formattedContent = formattedContent.replace(/\n/g, '<br>');
+
     state.editor.innerHTML = formattedContent;
 
-    // ダブルクリックで編集モードへ
-    state.editor.addEventListener('dblclick', (e) => {
-    const currentFullText = state.editor.textContent;
-    let caretOffset = 0;
+    
 
-    if (document.caretPositionFromPoint) {
-        const pos = document.caretPositionFromPoint(e.clientX, e.clientY);
-        if (pos) {
-            const range = document.createRange();
-            range.setStart(state.editor, 0);
-            range.setEnd(pos.offsetNode, pos.offset);
-            caretOffset = range.toString().length;
-        }
-    } else {
-        // Fallback for browsers that do not support caretPositionFromPoint
-        const range = document.caretRangeFromPoint?.(e.clientX, e.clientY);
-        if (range) {
-            const preCaretRange = document.createRange();
-            preCaretRange.selectNodeContents(state.editor);
-            preCaretRange.setEnd(range.startContainer, range.startOffset);
-            caretOffset = preCaretRange.toString().length;
-        }
-    }
+    
 
-    switchToEditMode({ caretPosition: caretOffset });
-});
+    
+    
 
-    // タイムスタンプクリックでジャンプする
-    state.editor.addEventListener('click', (e) => {
-        if (e.target.tagName === 'SPAN') {
-            state.selectedTimestampSpan = e.target;
-            updateSpanStyles();
-            if (!isYouTubeLive()) {
-                const video = document.querySelector('video');
-                if (video) {
-                    video.currentTime = parseTime(e.target.textContent);
-                }
-            }
-        }
-    });
-
-    contentArea.appendChild(state.editor);
-    state.editor.scrollTop = scrollPosition;
+    
     updateCharCount(text);
     updateSpanStyles();
 }
 
-function switchToEditMode(options = {}) {
-    const insertStampButton = document.querySelector('#youtube-timestamp-main-container button:nth-child(3)'); // 3番目のボタンがスタンプ挿入ボタン
-    if (insertStampButton) {
-        insertStampButton.style.display = 'block';
-    }
-    const scrollPosition = state.editor ? state.editor.scrollTop : 0;
-    const { caretPosition = -1, scrollToBottom = false } = options;
-    state.isEditing = true;
-    const contentArea = state.mainContainer.querySelector('div:nth-of-type(2)');
-    if (state.editor) contentArea.removeChild(state.editor);
-    state.editor = document.createElement('textarea');
-    state.editor.id = "youtube-timestamp-textarea";
-    Object.assign(state.editor.style, {
-        flex: '1', border: 'none', backgroundColor: 'transparent', color: '#E0E0E0',
-        padding: '10px', fontFamily: 'monospace', fontSize: '13px', resize: 'none', outline: 'none'
-    });
-    state.editor.setAttribute("spellcheck", "false");
-    state.editor.value = state.currentRawText;
-    let isComposing = false;
-    state.editor.addEventListener('compositionstart', () => { isComposing = true; });
-    state.editor.addEventListener('compositionend', (event) => {
-        isComposing = false;
-        event.target.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    state.editor.addEventListener('input', async () => {
-        if (isComposing) return;
-        state.currentRawText = state.editor.value; // Update currentRawText directly
-        const replacedText = await replaceNgWords(state.currentRawText);
-        if (state.currentRawText !== replacedText) {
-            const cursorPos = state.editor.selectionStart;
-            state.editor.value = replacedText;
-            state.editor.selectionStart = state.editor.selectionEnd = cursorPos;
-            state.currentRawText = replacedText; // Update currentRawText after NG word replacement
-        }
-        chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: state.currentRawText });
-        updateCharCount(state.currentRawText);
-        updateSpanStyles();
-    });
-    state.editor.addEventListener('blur', state.editorBlurListener = () => {
-        switchToDisplayMode(state.currentRawText);
-    });
-    state.editor.addEventListener('keydown', (event) => {
-        if (event.shiftKey && event.key === "Enter") {
-            event.preventDefault();
-            addTimestamp({ stayInEditMode: true });
-        }
-    });
-    contentArea.appendChild(state.editor);
-    if (scrollToBottom) {
-        state.editor.scrollTop = state.editor.scrollHeight;
-    } else {
-        state.editor.scrollTop = scrollPosition;
-    }
-    if (caretPosition !== -1) {
-        state.editor.selectionStart = state.editor.selectionEnd = caretPosition;
-    }
-    state.editor.focus();
-    updateCharCount(state.currentRawText);
-    updateSpanStyles();
-}
+
 
 function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
@@ -683,15 +611,28 @@ async function replaceNgWords(text) {
     const data = await chrome.storage.local.get('ngWords');
     const ngWords = data.ngWords || [];
     if (ngWords.length === 0) return text;
-    let replacedText = text;
-    for (const word of ngWords) {
-        if (word) {
-            const escapedWord = escapeRegExp(word);
-            const regex = new RegExp(escapedWord, 'gi');
-            replacedText = replacedText.replace(regex, '〇');
+
+    const lines = text.split('\n');
+    let processedLines = [];
+
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i];
+        let originalLine = line; // Keep original to check if replacement happened
+
+        for (const word of ngWords) {
+            if (word) {
+                const escapedWord = escapeRegExp(word);
+                const regex = new RegExp(escapedWord, 'gi');
+                line = line.replace(regex, '〇');
+            }
         }
+
+        processedLines.push(line);
     }
-    return replacedText;
+
+    // Join the processed lines. The `\n` from split will be added back.
+    // If a line was modified, it will now have `\n\n` after it.
+    return processedLines.join('\n');
 }
 
 // --- Data and UI Update Functions ---
@@ -699,11 +640,7 @@ function loadAndDisplayText() {
   if (!state.currentVideoId) return;
   chrome.runtime.sendMessage({ action: "loadText", videoId: state.currentVideoId }, (response) => {
     state.currentRawText = (response && response.text) ? response.text : "";
-    if (!state.isEditing) {
-        switchToDisplayMode(state.currentRawText);
-    } else {
-        state.editor.value = state.currentRawText;
-    }
+    renderEditor(state.currentRawText);
     if (!response || !response.text) {
         chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: state.currentRawText });
     }
@@ -716,8 +653,7 @@ function updateCharCount(text) {
   }
 }
 
-async function addTimestamp(options = {}) {
-    const { stayInEditMode = false } = options;
+async function addTimestamp() {
     const video = document.querySelector('video');
     if (!video) return;
 
@@ -737,19 +673,26 @@ async function addTimestamp(options = {}) {
 
     state.currentRawText = textToSave; // Update currentRawText
 
-    if (stayInEditMode && state.editor.tagName === 'TEXTAREA') {
-        state.editor.value = state.currentRawText;
-        state.editor.scrollTop = state.editor.scrollHeight;
-        state.editor.focus();
-        state.editor.selectionStart = state.editor.selectionEnd = state.currentRawText.length;
-        updateCharCount(state.currentRawText);
-        chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: state.currentRawText });
-        updateSpanStyles();
-    } else {
+    await new Promise(resolve => {
         chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: state.currentRawText }, () => {
-            switchToEditMode({ scrollToBottom: true });
+            resolve();
         });
-    }
+    });
+    await renderEditor(state.currentRawText);
+
+    // Set focus to the editor
+    state.editor.focus();
+
+    // Place cursor at the end of the text
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.setStart(state.editor, state.editor.childNodes.length);
+    range.collapse(true); // true for collapse to start, which is the end of content here
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    // Scroll to the bottom
+    state.editor.scrollTop = state.editor.scrollHeight;
 }
 
 // --- Event Handlers ---
@@ -776,20 +719,21 @@ function adjustSelectedTimestamp(delta) {
     updateSpanStyles(); // Re-apply styles to maintain selection highlight
 }
 
+function handleEditorKeyUp(event) {
+    event.stopPropagation();
+}
+
 async function handleGeneralShortcuts(event) {
+  // Always stop propagation to prevent YouTube's shortcuts
+  event.stopPropagation();
+
   const video = document.querySelector('video');
   if (!video) return;
 
-  if (state.isEditing) {
-      // 編集モード中はaddTimestampのみをハンドル
-      if (isMatch(event, state.shortcuts.addTimestamp)) {
-          event.preventDefault();
-          addTimestamp({ stayInEditMode: true });
-      }
-      return;
-  }
+  // Check if the editor is currently focused for editor-specific shortcuts
+  const isEditorFocused = state.editor && state.editor.contains(document.activeElement);
 
-  if (state.selectedTimestampSpan) {
+  if (isEditorFocused && state.selectedTimestampSpan) {
       if (event.key === 'ArrowUp') {
           event.preventDefault();
           adjustSelectedTimestamp(1);
@@ -799,15 +743,16 @@ async function handleGeneralShortcuts(event) {
       }
   }
 
-  // ショートカットキーの判定ヘルパー関数
+  // Shortcut key matching logic (applies globally)
   function isMatch(event, shortcut) {
-      if (!shortcut) return false; // ショートカットが未定義の場合
+      if (!shortcut) return false;
       return event.key === shortcut.key &&
              event.shiftKey === shortcut.shiftKey &&
              event.ctrlKey === shortcut.ctrlKey &&
              event.altKey === shortcut.altKey;
   }
 
+  // Global shortcuts
   if (isMatch(event, state.shortcuts.toggleVisibility)) {
       event.preventDefault();
       if (state.mainContainer) {
@@ -832,13 +777,13 @@ async function handleGeneralShortcuts(event) {
           const prefix = storedSettings.timestampPrefix !== undefined ? storedSettings.timestampPrefix : ' - ';
           const suffix = storedSettings.timestampSuffix !== undefined ? storedSettings.timestampSuffix : '  ';
           const textToAppend = `${prefix}${state.currentClipTime}${suffix}`;
-          
+
           let newText = state.currentRawText + textToAppend;
           newText = await replaceNgWords(newText);
-          state.currentRawText = newText; // Update currentRawText
+          state.currentRawText = newText;
 
           chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: state.currentRawText }, () => {
-              switchToEditMode({ scrollToBottom: true });
+              renderEditor(state.currentRawText);
           });
       }
   }
@@ -874,22 +819,127 @@ function makeDraggable(element, dragHandle) {
 function getRawTextFromDisplayEditor() {
     if (!state.editor || state.editor.tagName !== 'DIV') return "";
 
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = state.editor.innerHTML;
+    const clonedEditor = state.editor.cloneNode(true);
 
-    // Replace <img> tags with their alt text
-    tempDiv.querySelectorAll('img[alt]').forEach(img => {
+    // クローンしたDOM上で<img>タグと<span>タグの置換を行う
+    clonedEditor.querySelectorAll('img[alt]').forEach(img => {
         if (img.alt) {
             img.parentNode.replaceChild(document.createTextNode(img.alt), img);
         }
     });
 
-    // Remove <span> tags, keeping their content
-    tempDiv.querySelectorAll('span').forEach(span => {
+    clonedEditor.querySelectorAll('span').forEach(span => {
         span.parentNode.replaceChild(document.createTextNode(span.textContent), span);
     });
 
-    return tempDiv.textContent;
+    return extractRawTextFromElement(clonedEditor);
+}
+
+// New helper function to extract raw text from any element
+function extractRawTextFromElement(element) {
+    let rawText = '';
+    const nodes = element.childNodes;
+
+    function traverse(node) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            rawText += node.textContent;
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+            if (node.tagName === 'BR') {
+                rawText += '\n';
+            } else if (node.tagName === 'IMG' && node.alt) { // Handle IMG tags
+                rawText += node.alt;
+            } else if (node.tagName === 'SPAN') { // Handle SPAN tags
+                rawText += node.textContent;
+            } else {
+                for (let i = 0; i < node.childNodes.length; i++) {
+                    traverse(node.childNodes[i]);
+                }
+            }
+        }
+    }
+
+    for (let i = 0; i < nodes.length; i++) {
+        traverse(nodes[i]);
+    }
+    return rawText;
+}
+
+// Helper to save selection in a contenteditable div
+function saveSelection(editorEl) {
+    const selection = window.getSelection();
+    if (!selection.rangeCount) return null;
+
+    const range = selection.getRangeAt(0);
+    const preCaretRange = range.cloneRange();
+    preCaretRange.selectNodeContents(editorEl);
+    preCaretRange.setEnd(range.startContainer, range.startOffset);
+
+    // Get the text content of the range before the caret
+    const start = extractRawTextFromElement(preCaretRange.cloneContents()).length;
+
+    // Get the text content of the selected range (if any)
+    const selectedTextLength = extractRawTextFromElement(range.cloneContents()).length;
+    const end = start + selectedTextLength;
+
+    return { start: start, end: end };
+}
+
+// Helper to restore selection in a contenteditable div
+function restoreSelection(editorEl, savedSelection) {
+    if (!savedSelection) return;
+
+    const range = document.createRange();
+    const selection = window.getSelection();
+
+    let charCount = 0;
+    let foundStart = false;
+    let foundEnd = false;
+
+    function traverseNodes(node) {
+        if (foundStart && foundEnd) return;
+
+        if (node.nodeType === Node.TEXT_NODE) {
+            const nextCharCount = charCount + node.length;
+
+            if (!foundStart && savedSelection.start >= charCount && savedSelection.start <= nextCharCount) {
+                range.setStart(node, savedSelection.start - charCount);
+                foundStart = true;
+            }
+            if (!foundEnd && savedSelection.end >= charCount && savedSelection.end <= nextCharCount) {
+                range.setEnd(node, savedSelection.end - charCount);
+                foundEnd = true;
+            }
+            charCount = nextCharCount;
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+            if (node.tagName === 'BR') {
+                charCount += 1; // For newline
+            } else if (node.tagName === 'IMG' && node.alt) { // Handle IMG tags
+                charCount += node.alt.length;
+            } else if (node.tagName === 'SPAN') { // Handle SPAN tags
+                charCount += node.textContent.length;
+            }
+            // Recursively traverse children for other elements
+            for (let i = 0; i < node.childNodes.length; i++) {
+                traverseNodes(node.childNodes[i]);
+            }
+        } else {
+            for (let i = 0; i < node.childNodes.length; i++) {
+                traverseNodes(node.childNodes[i]);
+            }
+        }
+    }
+
+    traverseNodes(editorEl);
+
+    if (foundStart) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+    } else {
+        // Fallback: if start not found, place cursor at end
+        editorEl.focus();
+        selection.selectAllChildren(editorEl);
+        selection.collapseToEnd();
+    }
 }
 
 // Listen for messages from the background script
@@ -897,12 +947,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "clearTextInContent") {
     state.currentRawText = ""; // Clear currentRawText
     chrome.runtime.sendMessage({ action: "saveText", videoId: state.currentVideoId, text: state.currentRawText }, () => {
-        if (state.isEditing) {
-            state.editor.value = state.currentRawText;
-        }
-        else {
-            switchToDisplayMode(state.currentRawText);
-        }
+        renderEditor(state.currentRawText);
         updateCharCount(state.currentRawText);
     });
   }
@@ -911,5 +956,18 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     initExtension();
     sendResponse({ status: "reloaded" });
     return true; // 非同期レスポンスのためにtrueを返す
+  }
+  if (request.action === "toggleVisibility") {
+    if (state.mainContainer) {
+        state.mainContainer.hidden = !state.mainContainer.hidden;
+        chrome.storage.local.set({ mainContainerHidden: state.mainContainer.hidden });
+        sendResponse({status: "visibility toggled", hidden: state.mainContainer.hidden});
+    }
+    return true;
+  }
+  if (request.action === "checkUIExists") {
+    const uiExists = !!document.getElementById('youtube-timestamp-main-container');
+    sendResponse({ exists: uiExists });
+    return true;
   }
 });
