@@ -34,6 +34,7 @@
 
   <div id="timestamps-page" class="page">
     <h2>タイムスタンプ管理</h2>
+    <input type="search" id="timestamp-search-input" placeholder="タイトルや内容で検索..." style="width: 98%; margin-bottom: 10px; padding: 5px; box-sizing: border-box;">
     <div id="timestamps-list"></div>
     <button class="back-button" data-target="home-page">ホームに戻る</button>
   </div>
@@ -127,6 +128,16 @@
     <button id="reset-shortcuts">デフォルトに戻す</button>
     <p id="shortcut-save-status" style="color: green;"></p>
     <button class="back-button" data-target="home-page">ホームに戻る</button>
+  </div>
+
+  <div id="timestamp-detail-page" class="page">
+    <h3 id="detail-video-title" style="word-break: break-all; margin-top: 0;"></h3>
+    <textarea id="detail-timestamp-text" readonly style="width: 98%; height: 150px; resize: none; margin-top: 5px; padding: 5px; box-sizing: border-box;"></textarea>
+    <div style="margin-top: 10px; display: flex; justify-content: space-between;">
+      <button id="detail-goto-button">動画ページへ</button>
+      <button id="detail-delete-button" style="background-color: #f44336;">このタイムスタンプを削除</button>
+    </div>
+    <button class="back-button" data-target="timestamps-page" style="margin-top: 15px; width: 100%;">タイムスタンプ管理一覧に戻る</button>
   </div>
 
   <script src="popup.js"></script>

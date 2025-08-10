@@ -797,14 +797,18 @@ function handleEditorKeyUp(event) {
 }
 
 async function handleGeneralShortcuts(event) {
-  // Always stop propagation to prevent YouTube's shortcuts
-  event.stopPropagation();
+  // Removed: event.stopPropagation();
 
   const video = document.querySelector('video');
   if (!video) return;
 
   // Check if the editor is currently focused for editor-specific shortcuts
   const isEditorFocused = state.editor && state.editor.contains(document.activeElement);
+
+  // Stop propagation only if the editor is focused
+  if (isEditorFocused) {
+    event.stopPropagation();
+  }
 
   if (isEditorFocused && state.selectedTimestampSpan) {
       if (event.key === 'ArrowUp') {
