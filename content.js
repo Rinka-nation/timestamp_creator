@@ -345,6 +345,7 @@ function createMainContainer() {
   insertStampButton.onmouseover = () => { insertStampButton.style.backgroundColor = '#555'; };
   insertStampButton.onmouseout = () => { insertStampButton.style.backgroundColor = '#3e3e3e'; };
 
+  buttonBar.appendChild(addTimestampButton);
   buttonBar.appendChild(copyAllButton);
   buttonBar.appendChild(insertStampButton);
 
@@ -538,14 +539,6 @@ async function insertStampIntoEditor(stampName) { // Make it async
 
 
 async function renderEditor(text) {
-    // スタンプ挿入ボタンを非表示
-    const insertStampButton = document.querySelector('#youtube-timestamp-main-container button:nth-child(3)');
-    if (insertStampButton) {
-        insertStampButton.style.display = 'none';
-    }
-
-    
-
     // 状態リセット
     state.selectedTimestampSpan = null;
     
@@ -582,10 +575,6 @@ async function renderEditor(text) {
             });
         }
     }
-
-    // HTMLを挿入
-    // コンテンツエディタでの確実なレンダリングのために、改行を<br>タグに変換
-    formattedContent = formattedContent.replace(/\n/g, '<br>');
 
     state.editor.innerHTML = formattedContent;
 
@@ -740,6 +729,17 @@ async function handleGeneralShortcuts(event) {
       } else if (event.key === 'ArrowDown') {
           event.preventDefault();
           adjustSelectedTimestamp(-1);
+      }
+  }
+
+  // New: Video seek shortcuts (only when editor is NOT focused)
+  if (!isEditorFocused) {
+      if (event.key === 'ArrowLeft') {
+          event.preventDefault();
+          video.currentTime = Math.max(0, video.currentTime - 5);
+      } else if (event.key === 'ArrowRight') {
+          event.preventDefault();
+          video.currentTime = video.currentTime + 5;
       }
   }
 
@@ -917,12 +917,13 @@ function restoreSelection(editorEl, savedSelection) {
                 charCount += node.alt.length;
             } else if (node.tagName === 'SPAN') { // Handle SPAN tags
                 charCount += node.textContent.length;
+                // SPANタグの子ノードは、textContentで既にカウントされているため、再帰的に走査しない
+            } else { // BR, IMG, SPAN以外のELEMENT_NODEタイプの場合、子ノードを再帰的に走査
+                for (let i = 0; i < node.childNodes.length; i++) {
+                    traverseNodes(node.childNodes[i]);
+                }
             }
-            // Recursively traverse children for other elements
-            for (let i = 0; i < node.childNodes.length; i++) {
-                traverseNodes(node.childNodes[i]);
-            }
-        } else {
+        } else { // その他のノードタイプの場合、子ノードを再帰的に走査
             for (let i = 0; i < node.childNodes.length; i++) {
                 traverseNodes(node.childNodes[i]);
             }
