@@ -176,6 +176,83 @@ function isYouTubeLive() {
   return false;
 }
 
+function getCurrentChannelId() {
+  console.log("getCurrentChannelId: Attempting to get channel ID.");
+
+  // Try to get from video page meta tag
+  const channelIdMeta = document.querySelector('meta[itemprop="channelId"]');
+  if (channelIdMeta && channelIdMeta.content) {
+    console.log("getCurrentChannelId: Found via meta tag:", channelIdMeta.content);
+    return channelIdMeta.content;
+  }
+  console.log("getCurrentChannelId: Meta tag not found.");
+
+  // Try to get from channel page URL (e.g., /channel/UC...)
+  const pathSegments = window.location.pathname.split('/').filter(Boolean);
+  if (pathSegments[0] === 'channel' && pathSegments[1]) {
+    console.log("getCurrentChannelId: Found via channel URL path:", pathSegments[1]);
+    return pathSegments[1];
+  }
+  console.log("getCurrentChannelId: Channel URL path not found.");
+
+  // Try to get from channel page URL (e.g., /user/username or /@handle)
+  const channelLink = document.querySelector('link[rel="canonical"][href*="/channel/"]');
+  if (channelLink && channelLink.href) {
+    const match = channelLink.href.match(/\/channel\/([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      console.log("getCurrentChannelId: Found via canonical link:", match[1]);
+      return match[1];
+    }
+  }
+  console.log("getCurrentChannelId: Canonical link not found.");
+
+  // --- NEW: Try to get from Membership Perks button ---
+  const membershipButton = document.querySelector('a[href*="/membership"].yt-spec-button-shape-next');
+  if (membershipButton && membershipButton.href) {
+    const match = membershipButton.href.match(/\/channel\/([a-zA-Z0-9_-]+)\/membership/);
+    if (match && match[1]) {
+      console.log("getCurrentChannelId: Found via Membership button:", match[1]);
+      return match[1];
+    }
+  }
+  console.log("getCurrentChannelId: Membership button not found or missing channel ID.");
+  // --- END NEW ---
+
+  // --- NEW: Try to get from ytInitialPlayerResponse or ytInitialData ---
+  if (typeof ytInitialPlayerResponse !== 'undefined' && ytInitialPlayerResponse.videoDetails && ytInitialPlayerResponse.videoDetails.channelId) {
+    console.log("getCurrentChannelId: Found via ytInitialPlayerResponse:", ytInitialPlayerResponse.videoDetails.channelId);
+    return ytInitialPlayerResponse.videoDetails.channelId;
+  }
+  if (typeof ytInitialData !== 'undefined' && ytInitialData.metadata && ytInitialData.metadata.channelMetadataRenderer && ytInitialData.metadata.channelMetadataRenderer.externalId) {
+    console.log("getCurrentChannelId: Found via ytInitialData (channel page):", ytInitialData.metadata.channelMetadataRenderer.externalId);
+    return ytInitialData.metadata.channelMetadataRenderer.externalId;
+  }
+  // For video pages, ytInitialData might have it deeper
+  if (typeof ytInitialData !== 'undefined' && ytInitialData.contents && ytInitialData.contents.twoColumnWatchNextResults && ytInitialData.contents.twoColumnWatchNextResults.results && ytInitialData.contents.twoColumnWatchNextResults.results.results && ytInitialData.contents.twoColumnWatchNextResults.results.results.contents) {
+    const videoDetails = ytInitialData.contents.twoColumnWatchNextResults.results.results.contents.find(item => item.videoPrimaryInfoRenderer);
+    if (videoDetails && videoDetails.videoPrimaryInfoRenderer && videoDetails.videoPrimaryInfoRenderer.owner && videoDetails.videoPrimaryInfoRenderer.owner.videoOwnerRenderer && videoDetails.videoPrimaryInfoRenderer.owner.videoOwnerRenderer.channelId) {
+      console.log("getCurrentChannelId: Found via ytInitialData (video page deeper):", videoDetails.videoPrimaryInfoRenderer.owner.videoOwnerRenderer.channelId);
+      return videoDetails.videoPrimaryInfoRenderer.owner.videoOwnerRenderer.channelId;
+    }
+  }
+  console.log("getCurrentChannelId: ytInitialPlayerResponse or ytInitialData not found or missing channelId.");
+  // --- END NEW ---
+
+  // Fallback: If on a video page, try to find the channel link in the DOM
+  const channelLinkElement = document.querySelector('#top-row #channel-name a, #owner-container #channel-name a');
+  if (channelLinkElement && channelLinkElement.href) {
+    const match = channelLinkElement.href.match(/\/channel\/([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+      console.log("getCurrentChannelId: Found via DOM channel link:", match[1]);
+      return match[1];
+    }
+  }
+  console.log("getCurrentChannelId: DOM channel link not found.");
+
+  console.log("getCurrentChannelId: No channel ID found. Returning null.");
+  return null;
+}
+
 // --- Main Logic ---
 async function initExtension() {
   
@@ -413,19 +490,26 @@ function createMainContainer() {
 function showStampSelectionOverlay() {
   if (state.stampSelectionOverlay) {
     state.stampSelectionOverlay.style.display = 'flex';
-    // メンバーシップスタンプデータを取得してレンダリング
-    try {
-      chrome.runtime.sendMessage({ action: "getMembershipStamps" }, (response) => {
-        if (chrome.runtime.lastError) {
-          console.error("Error getting membership stamps:", chrome.runtime.lastError);
-          state.stampListContainer.innerHTML = '<p style="color: red;">スタンプの読み込みに失敗しました。</p>';
-        } else {
-          renderStampsInOverlay(response);
-        }
-      });
-    } catch (e) {
-      console.error("Error sending message to background:", e);
-      state.stampListContainer.innerHTML = '<p style="color: red;">スタンプの読み込みに失敗しました。</p>';
+    const currentChannelId = getCurrentChannelId();
+
+    if (currentChannelId) {
+      // チャンネルIDが取得できた場合
+      try {
+        chrome.runtime.sendMessage({ action: "getMembershipStamps", channelId: currentChannelId }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.error("Error getting membership stamps:", chrome.runtime.lastError);
+            state.stampListContainer.innerHTML = '<p style="color: red;">スタンプの読み込みに失敗しました。</p>';
+          } else {
+            renderStampsInOverlay(response);
+          }
+        });
+      } catch (e) {
+        console.error("Error sending message to background:", e);
+        state.stampListContainer.innerHTML = '<p style="color: red;">スタンプの読み込みに失敗しました。</p>';
+      }
+    } else {
+      // チャンネルIDが取得できなかった場合
+      state.stampListContainer.innerHTML = '<p>このページのチャンネルIDが取得できませんでした。</p>';
     }
   }
 }
@@ -433,7 +517,7 @@ function showStampSelectionOverlay() {
 function renderStampsInOverlay(channelData) {
   state.stampListContainer.innerHTML = '';
   if (channelData.length === 0) {
-    state.stampListContainer.innerHTML = '<p>保存されたメンバーシップスタンプはありません。</p>';
+    state.stampListContainer.innerHTML = '<p>このチャンネルのスタンプは見つかりませんでした。<br>ポップアップからスタンプ情報を更新してください。</p>';
     return;
   }
 
@@ -969,6 +1053,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "checkUIExists") {
     const uiExists = !!document.getElementById('youtube-timestamp-main-container');
     sendResponse({ exists: uiExists });
+    return true;
+  }
+
+  if (request.action === "getChannelIdForDebug") {
+    (async () => {
+      const channelId = getCurrentChannelId();
+      sendResponse({ channelId: channelId });
+    })();
     return true;
   }
 });

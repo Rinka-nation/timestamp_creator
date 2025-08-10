@@ -9,17 +9,30 @@
     const channelNameElement = renderer.querySelector('#title');
     const channelName = channelNameElement ? channelNameElement.textContent.trim() : 'Unknown Channel';
     
+    // --- NEW: Try to get canonical channel ID from meta tag ---
+    let canonicalChannelId = null;
+    const channelIdMeta = document.querySelector('meta[itemprop="channelId"]');
+    if (channelIdMeta && channelIdMeta.content) {
+      canonicalChannelId = channelIdMeta.content;
+    }
+    // --- END NEW ---
+
     const stamps = [];
-    let channelId = null;
+    let channelId = null; // This will be set to canonicalChannelId if found, otherwise fallback
 
     renderer.querySelectorAll('.CATEGORY_TYPE_CUSTOM img').forEach((img, index) => {
       const name = img.getAttribute('aria-label');
       const url = img.src;
       
       if (index === 0) {
-          const idAttr = img.getAttribute('id');
-          if (idAttr && idAttr.includes('/')) {
-              channelId = idAttr.split('/')[0];
+          // If canonicalChannelId is found, use it. Otherwise, fall back to existing logic.
+          if (canonicalChannelId) {
+              channelId = canonicalChannelId;
+          } else {
+              const idAttr = img.getAttribute('id');
+              if (idAttr && idAttr.includes('/')) {
+                  channelId = idAttr.split('/')[0];
+              }
           }
       }
 

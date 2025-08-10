@@ -45,6 +45,26 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial page load
     showPage('home-page');
 
+    // --- Debug: Display Current Channel ID ---
+    const debugChannelIdDisplay = document.getElementById('debug-current-channel-id');
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0] && tabs[0].id) {
+            chrome.tabs.sendMessage(tabs[0].id, { action: "getChannelIdForDebug" }, (response) => {
+                if (chrome.runtime.lastError) {
+                    console.error("Error getting channel ID for debug:", chrome.runtime.lastError);
+                    debugChannelIdDisplay.textContent = "エラー";
+                } else if (response && response.channelId) {
+                    debugChannelIdDisplay.textContent = response.channelId;
+                } else {
+                    debugChannelIdDisplay.textContent = "取得できませんでした";
+                }
+            });
+        } else {
+            debugChannelIdDisplay.textContent = "タブが見つかりません";
+        }
+    });
+    // --- End Debug ---
+
     const reloadButton = document.getElementById('reload-extension-button');
     reloadButton.addEventListener('click', () => {
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {

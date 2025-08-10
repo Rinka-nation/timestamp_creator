@@ -181,7 +181,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "getMembershipStamps") {
     (async () => {
       const data = await STORAGE.get('membershipStamps');
-      sendResponse(data.membershipStamps || []);
+      let filteredStamps = data.membershipStamps || [];
+
+      if (request.channelId) {
+        filteredStamps = filteredStamps.filter(channel => channel.channelId === request.channelId);
+      }
+      sendResponse(filteredStamps);
     })();
     return true;
   }
